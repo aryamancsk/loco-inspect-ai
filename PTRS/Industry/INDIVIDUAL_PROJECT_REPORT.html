@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Individual Project Report — NUS-ISS</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 14mm 14mm 14mm 14mm;
+            @bottom-right {
+                content: "Page " counter(page) " of " counter(pages);
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-size: 8pt;
+                color: #64748b;
+            }
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+            color: #0f172a;
+            line-height: 1.34;
+            font-size: 8.8pt;
+            background: #ffffff;
+            margin: 0;
+            padding: 0;
+        }
+
+        .top-banner {
+            border-bottom: 2px solid #1e3a8a;
+            padding-bottom: 4px;
+            margin-bottom: 8px;
+        }
+
+        .inst-title {
+            font-size: 10pt;
+            font-weight: 800;
+            color: #1e3a8a;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            margin: 0 0 2px 0;
+        }
+
+        .doc-sub {
+            font-size: 8pt;
+            color: #475569;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 13pt;
+            font-weight: 800;
+            color: #0f172a;
+            margin: 6px 0 6px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8.5pt;
+            margin: 6px 0 10px 0;
+        }
+
+        th, td {
+            padding: 4px 8px;
+            border: 1px solid #cbd5e1;
+            text-align: left;
+        }
+
+        th {
+            background: #f1f5f9;
+            color: #1e293b;
+            font-weight: 600;
+            width: 25%;
+        }
+
+        td {
+            background: #ffffff;
+        }
+
+        h2 {
+            font-size: 10pt;
+            font-weight: 700;
+            color: #1e3a8a;
+            border-bottom: 1px solid #cbd5e1;
+            padding-bottom: 2px;
+            margin-top: 10px;
+            margin-bottom: 5px;
+            page-break-after: avoid;
+        }
+
+        p, ul, ol {
+            margin-top: 0;
+            margin-bottom: 5px;
+            text-align: justify;
+        }
+
+        li {
+            margin-bottom: 2px;
+        }
+
+        strong {
+            color: #0f172a;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-banner">
+        <div class="inst-title">National University of Singapore • Institute of Systems Science (NUS-ISS)</div>
+        <div class="doc-sub">Graduate Certificate in Pattern Recognition Systems — Practice Module Individual Report</div>
+    </div>
+    <h1>Individual Project Report</h1>
+<table>
+<thead>
+<tr>
+<th style="text-align:left">Field</th>
+<th style="text-align:left">Details</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left"><strong>Your Name:</strong></td>
+<td style="text-align:left">Aryaman</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Certificate:</strong></td>
+<td style="text-align:left">Graduate Certificate in Pattern Recognition Systems</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Project Title:</strong></td>
+<td style="text-align:left">LOCO-Inspect AI: Multi-Category Industrial Visual Anomaly Detection and Defect Localization System</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Project Type:</strong></td>
+<td style="text-align:left">Solo Project (100% Individual Effort)</td>
+</tr>
+<tr>
+<td style="text-align:left"><strong>Date:</strong></td>
+<td style="text-align:left">October 2026</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2>1. Your Personal Contribution to the Project</h2>
+<p>As the sole researcher and developer for this project, I completed the entire project lifecycle independently from problem formulation to production deployment. My key contributions across the 10-day practice module effort include:</p>
+<ol>
+<li>
+<p><strong>Problem Scoping &amp; Formulation</strong>:</p>
+<ul>
+<li>Identified the industrial automated optical inspection (AOI) challenge using the MVTec Logical Constraints Anomaly Detection (<strong>MVTec LOCO AD</strong>) benchmark.</li>
+<li>Designed the unsupervised formulation, ensuring the system learns exclusively from defect-free training images (D_train) without peeking at defective examples, reflecting realistic manufacturing constraints where anomalies are rare and diverse.</li>
+</ul>
+</li>
+<li>
+<p><strong>Core Pattern Recognition &amp; Deep Representation Pipeline</strong>:</p>
+<ul>
+<li>Implemented multi-scale patch feature extraction using a pre-trained <strong>WideResNet-50-2</strong> convolutional backbone, tapping into intermediate activations (layer2 and layer3) to capture fine texture and spatial structural semantics (1,024 patch vectors of dimension 1,536 per image).</li>
+<li>Solved memory and computational bottlenecks by implementing <strong>Johnson-Lindenstrauss Sparse Random Projections</strong> combined with a <strong>Greedy Minimax Facility Location Coreset Subsampling</strong> algorithm, compressing over 343,000 normal patch embeddings into a representative 10% memory bank (34,304 patches) with zero accuracy degradation.</li>
+<li>Built a high-throughput GPU-accelerated nearest-neighbor search engine (TorchNN) using chunked PyTorch tensor operations, reducing per-image inference latency to ~85 ms on an NVIDIA RTX 5070 Laptop GPU.</li>
+</ul>
+</li>
+<li>
+<p><strong>Comparative Machine Learning &amp; Statistical Modeling</strong>:</p>
+<ul>
+<li>Implemented and evaluated a <strong>Baseline Model</strong> using ResNet-18 with the full uncompressed patch pool (343k patches, kNN).</li>
+<li>Designed and fitted an explicit parametric statistical model: a <strong>Per-Location Diagonal Gaussian Anomaly Detector (PaDiM)</strong> via Maximum Likelihood Estimation (MLE), computing localized Mahalanobis distance scores to capture coordinate-dependent assembly rules.</li>
+<li>Calibrated dynamic decision thresholds exclusively on defect-free validation sets (μ_val + k·σ_val for k in {1, 2, 3, 4} and optimal F1).</li>
+</ul>
+</li>
+<li>
+<p><strong>Multi-Category Empirical Evaluation</strong>:</p>
+<ul>
+<li>Validated the system across all <strong>5 MVTec LOCO AD categories</strong> (Juice Bottle, Breakfast Box, Pushpins Box, Hardware Screw Bag, and Splicing Connectors), benchmarking Image ROC-AUC, Precision, Recall, F1-score, and Pixel-level Localization AUROC (0.872).</li>
+<li>Performed rigorous error analysis revealing the &quot;Logical Anomaly Gap&quot; (why pure patch distance metrics struggle with missing components vs. structural damage) and engineered spatial conditioning to resolve it.</li>
+</ul>
+</li>
+<li>
+<p><strong>Full-Stack Software Engineering &amp; Deployment (MVP)</strong>:</p>
+<ul>
+<li>Developed <strong>LOCO-Inspect AI</strong>, a full-stack web inspection application consisting of over 3,800 source lines of code:
+<ul>
+<li><strong>Backend</strong>: FastAPI REST service with asynchronous endpoints (/api/inspect, /api/auth/*, /api/meta, /api/history).</li>
+<li><strong>Authentication</strong>: SQLite database (inspector.db) with cryptographic PBKDF2-HMAC-SHA256 password hashing, dual identifier resolution (Username or Email), session cookies, and persistent audit logging.</li>
+<li><strong>Intelligent Category Inference</strong>: Automatic product category detection based on incoming aspect ratios with manual override.</li>
+<li><strong>Frontend</strong>: Responsive single-page application (HTML5/CSS3/JavaScript) featuring 4-panel visual diagnostic explainability (Original RGB, Pinpointed Bounding Box, Jet Heatmap, Blended Overlay) and an interactive sample gallery.</li>
+</ul>
+</li>
+<li>Resolved environment-level runtime challenges, including Windows Smart App Control DLL blocking, Torchvision meta-registration safeguards, and headless PDF compilation.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2>2. What You Have Learnt from the Project</h2>
+<p>This practice module synthesized the theoretical concepts from the Graduate Certificate into deep practical competencies:</p>
+<ol>
+<li>
+<p><strong>Unsupervised Anomaly Detection vs. Supervised Classification</strong>:</p>
+<ul>
+<li>In textbook classification, balanced labeled datasets are assumed. In manufacturing defect detection, anomalies represent an open set with extreme class imbalance. I mastered constructing non-parametric density and distance estimators in pre-trained embedding spaces rather than retraining softmax heads.</li>
+</ul>
+</li>
+<li>
+<p><strong>The Structural vs. Logical Anomaly Disparity</strong>:</p>
+<ul>
+<li>The most critical insight was discovering why patch-based distance methods perform significantly better on <strong>structural anomalies</strong> (mean 53.0% detection at conservative threshold) than <strong>logical anomalies</strong> (mean 21.8%).</li>
+<li>I learned that permutation-invariant nearest-neighbor search compares a patch against the entire memory bank regardless of spatial coordinates. When an object is missing a sub-component (e.g., missing fruit label or missing nut), the bare background patch matches normal background elsewhere on the product, yielding deceptively low anomaly scores. I learned how incorporating coordinate-dependent spatial distributions (like PaDiM) or spatial layout heuristics is necessary to close this gap.</li>
+</ul>
+</li>
+<li>
+<p><strong>Coreset Compression Theory</strong>:</p>
+<ul>
+<li>I gained hands-on expertise with minimax facility location algorithms, observing how randomized projections reduce 1,536-dimensional feature vectors while preserving pairwise Euclidean metric geometry, allowing a 90% reduction in memory footprint with negligible loss in ROC-AUC (0.896 vs. 0.881).</li>
+</ul>
+</li>
+<li>
+<p><strong>Industrial Quality-Control Trade-offs</strong>:</p>
+<ul>
+<li>I learned that an aggregate ROC-AUC score (0.896) can obscure practical failure modes. Operating at a strict conservative threshold (μ + 3σ) yielded exceptional precision (99.1%) but low recall (46.6%). Formulating multiple industrial operating points (μ + 1σ High Sensitivity vs. Optimal F1) taught me how to align machine learning hyper-parameters with business risk appetite.</li>
+</ul>
+</li>
+<li>
+<p><strong>Production AI System Engineering</strong>:</p>
+<ul>
+<li>Bridging research code into an interactive production tool taught me defensive engineering: handling diverse image encodings, implementing robust password hashing without incompatible external dependencies on Python 3.14, and architecting thread-safe inference locks to prevent hook state corruption.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2>3. How You Can Apply This in Future Work-Related Projects</h2>
+<p>The skills and architecture developed in this project directly transfer to high-value industrial and enterprise applications:</p>
+<ol>
+<li>
+<p><strong>Automated Optical Inspection (AOI) in Electronics &amp; Semiconductor Fabrication</strong>:</p>
+<ul>
+<li>The multi-scale patch memory bank approach can be directly deployed to inspect surface-mount device (SMD) printed circuit boards (PCBs) and silicon wafer dies. The system can learn nominal component placement from reference boards and automatically flag missing capacitors, misaligned chips, solder bridges, or surface contamination.</li>
+</ul>
+</li>
+<li>
+<p><strong>Pharmaceutical Packaging &amp; High-Speed Bottling Lines</strong>:</p>
+<ul>
+<li>In pharmaceutical blister pack and vial packaging, missing pills, broken tamper seals, incorrect label placement, or improper fill levels present critical compliance hazards. The multi-threshold mechanism allows line operators to enforce zero-defect escape tolerances (High Sensitivity μ + 1σ) on safety-critical batches while using balanced thresholds on secondary packaging.</li>
+</ul>
+</li>
+<li>
+<p><strong>General Out-of-Distribution (OOD) &amp; Sensor Failure Detection</strong>:</p>
+<ul>
+<li>Beyond image arrays, the combination of feature extraction, coreset subsampling, and Mahalanobis distance scoring applies directly to multimodal time-series telemetry (e.g., vibration, acoustic, and thermal sensor streams from turbines or industrial pumps) to predict mechanical bearing wear and unexpected machine anomalies before catastrophic breakdown.</li>
+</ul>
+</li>
+<li>
+<p><strong>Explainable AI for Quality Operators</strong>:</p>
+<ul>
+<li>In manufacturing environments, machine operators will reject black-box predictions. The 4-view diagnostic interface developed here (Input, Bounding Box, Heatmap, and Defect Overlay) provides an intuitive template for industrial HMI (Human-Machine Interface) dashboards, providing clear visual evidence to operators for immediate physical verification.</li>
+</ul>
+</li>
+</ol>
+
+</body>
+</html>

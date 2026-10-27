@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Large Datasets (>6 GB MVTec LOCO AD raw images)
+**/DATA/
+DATA/
+*.tar.xz
+*.zip
+*.tar.gz
+
+# Large Memory Bank Caches (>100 MB GitHub limit)
+*.joblib
+outputs/*.joblib
+PTRS/Industry/outputs/*.joblib
+
+# Database temporary files
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Scratch & Personal Files
+Resume_Output/
+Untitled-1.ipynb
+.gradio/
+.system_generated/
+*.tmp
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini

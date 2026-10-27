@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LOCO-Inspect AI — Industrial Defect & Visual Anomaly Inspector</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo">🔍</div>
+      <div>
+        <div class="brand-title">LOCO-Inspect AI</div>
+        <div class="brand-subtitle">MVTec LOCO AD • Logical &amp; Structural Visual Defect Detection</div>
+      </div>
+    </div>
+
+    <nav class="nav-tabs" role="tablist">
+      <button class="nav-tab active" data-tab="inspector" onclick="switchTab('inspector')">
+        <span>🛡️</span> Live Defect Inspector
+      </button>
+      <button class="nav-tab" data-tab="history" onclick="switchTab('history')">
+        <span>📜</span> Inspection History
+      </button>
+      <button class="nav-tab" data-tab="analytics" onclick="switchTab('analytics')">
+        <span>📊</span> Model Benchmarks &amp; Analytics
+      </button>
+    </nav>
+
+    <div class="user-bar">
+      <div class="device-pill" id="deviceBadge">
+        <span>⚡</span> <span id="deviceText">GPU Ready</span>
+      </div>
+
+      <!-- Shown when logged in -->
+      <div id="userLoggedInBox" style="display: none; align-items: center; gap: 0.6rem;">
+        <div class="user-pill">
+          <div class="user-avatar" id="userAvatar">U</div>
+          <div>
+            <div style="font-weight: 700; color: #fff; line-height: 1.15;" id="userNameDisplay">Inspector</div>
+            <div style="font-size: 0.7rem; color: var(--text-muted);" id="userRoleDisplay">Quality Engineer</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="openAuthModal('login')" title="Switch Account">
+          Switch Account
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="handleLogout()">
+          Log Out
+        </button>
+      </div>
+
+      <!-- Shown when logged out -->
+      <div id="userLoggedOutBox" style="display: flex; align-items: center; gap: 0.5rem;">
+        <button class="btn btn-secondary btn-sm" onclick="openAuthModal('login')">
+          🔑 Log In
+        </button>
+        <button class="btn btn-primary btn-sm" style="width: auto;" onclick="openAuthModal('signup')">
+          ✨ Sign Up
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container">
+
+    <!-- TAB 1: LIVE DEFECT INSPECTOR -->
+    <section id="tab-inspector" class="tab-panel active">
+      <div class="inspector-grid">
+
+        <!-- Left Column: Upload & Configuration Controls -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📤 Product Image &amp; Inspection Setup</div>
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Step 1 of 2</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="categorySelect">Product Category</label>
+            <select id="categorySelect" class="form-select" onchange="onCategoryFilterChange()">
+              <option value="auto">✨ Auto-Detect Category (Recommended)</option>
+              <option value="juice_bottle">🍾 Juice Bottle (juice_bottle)</option>
+              <option value="breakfast_box">🍱 Breakfast Box (breakfast_box)</option>
+              <option value="pushpins">📌 Pushpins Box (pushpins)</option>
+              <option value="screw_bag">🔩 Hardware Screw Bag (screw_bag)</option>
+              <option value="splicing_connectors">🔌 Splicing Connectors (splicing_connectors)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="modeSelect">Quality Control Operating Mode (Threshold)</label>
+            <select id="modeSelect" class="form-select" onchange="onModeChange()">
+              <option value="optimal">🎯 Smart / Optimal F1 (Recommended — Catches Logical &amp; Structural Faults)</option>
+              <option value="high_recall">🛡️ High Sensitivity / Safety-Critical (μ + 1σ)</option>
+              <option value="balanced">⚖️ Balanced Quality Control (μ + 2σ)</option>
+              <option value="conservative">🏭 Conservative / Low False-Alarm (μ + 3σ — Notebook Default)</option>
+              <option value="strict">🔒 Ultra-Conservative (μ + 4σ)</option>
+            </select>
+          </div>
+
+          <!-- Upload Dropzone -->
+          <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+            <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileSelect(event)" />
+            <div class="dropzone-icon">🖼️</div>
+            <div class="dropzone-title">Click to Upload or Drag &amp; Drop Image</div>
+            <div class="dropzone-hint">Supports PNG, JPG, WEBP, BMP • Automatic RGB conversion</div>
+
+            <div class="preview-box" id="uploadPreviewBox" onclick="event.stopPropagation()">
+              <img id="uploadPreviewImg" class="preview-thumb" src="" alt="Preview" />
+              <div class="preview-meta">
+                <div class="preview-name" id="uploadPreviewName">image.png</div>
+                <div class="preview-sub" id="uploadPreviewSub">Ready to inspect</div>
+              </div>
+              <button type="button" class="btn btn-secondary btn-sm" onclick="clearSelectedFile()">Clear</button>
+            </div>
+          </div>
+
+          <div id="inspectErrorAlert" class="alert-box"></div>
+
+          <button id="inspectBtn" class="btn btn-primary" onclick="runInspection()">
+            <span>🔍</span> Inspect Object for Faults &amp; Anomalies
+          </button>
+
+          <!-- Instant Sample Test Browser -->
+          <div style="margin-top: 1.35rem; padding-top: 1.1rem; border-top: 1px solid var(--border-subtle);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem;">
+              <span style="font-size: 0.84rem; font-weight: 700; color: #fff;">⚡ Quick-Test Reference Samples</span>
+              <select id="sampleCategoryFilter" class="form-select" style="width: auto; padding: 0.25rem 0.55rem; font-size: 0.76rem;" onchange="renderSamples()">
+                <option value="juice_bottle">🍾 Juice Bottle</option>
+                <option value="breakfast_box">🍱 Breakfast Box</option>
+                <option value="pushpins">📌 Pushpins Box</option>
+                <option value="screw_bag">🔩 Screw Bag</option>
+                <option value="splicing_connectors">🔌 Splicing Connectors</option>
+              </select>
+            </div>
+            <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.4rem;">
+              Click any sample below to immediately test Normal vs. Logical vs. Structural Fault detection:
+            </p>
+            <div id="samplesGrid" class="samples-grid"></div>
+          </div>
+        </div>
+
+        <!-- Right Column: Inspection Results & Visual Explainability -->
+        <div class="card" id="resultContainer">
+          <div class="card-header">
+            <div class="card-title">🔬 AI Visual Inspection &amp; Fault Diagnostic Report</div>
+            <div id="resultMetaBadge" style="font-size: 0.78rem; color: var(--text-muted);">
+              Ready • Select or upload an image
+            </div>
+          </div>
+
+          <!-- Empty State before first inspection -->
+          <div id="emptyResultState" style="text-align: center; padding: 3.2rem 1.5rem;">
+            <div style="font-size: 3.2rem; margin-bottom: 0.75rem;">🤖</div>
+            <h3 style="font-size: 1.2rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem;">
+              Upload an Object Image or Click a Quick-Test Sample
+            </h3>
+            <p style="font-size: 0.9rem; color: var(--text-muted); max-width: 560px; margin: 0 auto 1.25rem;">
+              Our WideResNet50 PatchCore + Spatial Layout engine compares 1,024 local patch features against defect-free reference models to determine whether the uploaded object is <strong>Normal (Pass)</strong> or <strong>Faulty (Anomalous)</strong>, pinpointing the exact defect location and cause.
+            </p>
+            <div style="display: flex; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" onclick="triggerSampleByType('good')">
+                ✅ Test a Normal Object
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="triggerSampleByType('logical_anomalies')">
+                🧩 Test a Logical Fault
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="triggerSampleByType('structural_anomalies')">
+                💥 Test a Structural Fault
+              </button>
+            </div>
+          </div>
+
+          <!-- Populated Result Content -->
+          <div id="populatedResultState" style="display: none;">
+
+            <!-- Auto-switched category banner if triggered -->
+            <div id="autoSwitchNotice" class="alert-box success" style="display: none; margin-bottom: 0.9rem;"></div>
+
+            <!-- Verdict Banner -->
+            <div id="verdictBanner" class="verdict-banner normal">
+              <div class="verdict-heading">
+                <div class="verdict-icon" id="verdictIcon">✅</div>
+                <div>
+                  <div class="verdict-title" id="verdictTitle">PASS / NORMAL (NO FAULT)</div>
+                  <div class="verdict-sub" id="verdictSubtitle">Category: Juice Bottle • Subtype: Normal Reference</div>
+                </div>
+              </div>
+              <div id="defectBadgesWrap" style="display: flex; gap: 0.45rem; flex-wrap: wrap; align-items: center;"></div>
+              <div class="verdict-explanation" id="verdictExplanation"></div>
+            </div>
+
+            <!-- 4 KPI Cards -->
+            <div class="kpi-grid">
+              <div class="kpi-card">
+                <div class="kpi-label">Anomaly Score</div>
+                <div class="kpi-value" id="kpiScore">0.0000</div>
+                <div class="kpi-note" id="kpiZScore">0.00σ vs normal mean</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Decision Cutoff</div>
+                <div class="kpi-value" id="kpiThreshold">0.0000</div>
+                <div class="kpi-note" id="kpiModeNote">Optimal F1 Mode</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Fault Severity</div>
+                <div class="kpi-value" id="kpiSeverity" style="font-size: 1.05rem;">None</div>
+                <div class="kpi-note" id="kpiSubtype">Defect-Free</div>
+              </div>
+              <div class="kpi-card">
+                <div class="kpi-label">Primary Hotspot Zone</div>
+                <div class="kpi-value" id="kpiRegion" style="font-size: 1.02rem;">Center Region</div>
+                <div class="kpi-note" id="kpiHotspot">Hotspot area: 0.0%</div>
+              </div>
+            </div>
+
+            <!-- Visual Score Gauge Bar -->
+            <div class="gauge-box">
+              <div class="gauge-header">
+                <span id="gaugeLeftLabel">Normal Mean: 28.76</span>
+                <span id="gaugeCenterLabel" style="font-weight: 700; color: #fde047;">Threshold Cutoff: 29.98</span>
+                <span id="gaugeRightLabel">High Anomaly Zone (45.0+)</span>
+              </div>
+              <div class="gauge-track">
+                <div class="gauge-threshold-line" id="gaugeThresholdLine" style="left: 50%;" title="Decision Threshold"></div>
+                <div class="gauge-marker" id="gaugeScoreMarker" style="left: 25%;" title="Image Anomaly Score"></div>
+              </div>
+            </div>
+
+            <!-- 4 Visual Inspection Panels -->
+            <div class="visual-grid">
+              <div class="visual-card">
+                <div class="visual-card-header">
+                  <span>1. Original Product</span>
+                  <span style="font-size: 0.7rem; color: var(--text-muted);">Input RGB</span>
+                </div>
+                <div class="visual-img-wrap">
+                  <img id="imgOriginal" src="" alt="Original product" onclick="openLightbox(this.src)" />
+                </div>
+              </div>
+
+              <div class="visual-card">
+                <div class="visual-card-header">
+                  <span>2. Fault Localization</span>
+                  <span style="font-size: 0.7rem; color: #f87171;">Peak Target Box</span>
+                </div>
+                <div class="visual-img-wrap">
+                  <img id="imgLocalized" src="" alt="Pinpointed defect box" onclick="openLightbox(this.src)" />
+                </div>
+              </div>
+
+              <div class="visual-card">
+                <div class="visual-card-header">
+                  <span>3. Anomaly Heatmap</span>
+                  <span style="font-size: 0.7rem; color: #38bdf8;">Jet Scale</span>
+                </div>
+                <div class="visual-img-wrap">
+                  <img id="imgHeatmap" src="" alt="Anomaly heatmap" onclick="openLightbox(this.src)" />
+                </div>
+              </div>
+
+              <div class="visual-card">
+                <div class="visual-card-header">
+                  <span>4. Defect Overlay</span>
+                  <span style="font-size: 0.7rem; color: #fbbf24;">42% Blend</span>
+                </div>
+                <div class="visual-img-wrap">
+                  <img id="imgOverlay" src="" alt="Defect overlay" onclick="openLightbox(this.src)" />
+                </div>
+              </div>
+            </div>
+
+            <!-- Bottom Details: Operating Points Table + Category Defect Checklist -->
+            <div style="display: grid; grid-template-columns: 1.15fr 1fr; gap: 1rem;">
+              <div style="background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.88rem; font-weight: 700; color: #fff; margin-bottom: 0.6rem;">
+                  ⚖️ Decision Across Quality-Control Operating Points
+                </div>
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Operating Mode</th>
+                      <th>Cutoff</th>
+                      <th>Margin</th>
+                      <th>Verdict</th>
+                    </tr>
+                  </thead>
+                  <tbody id="operatingPointsBody"></tbody>
+                </table>
+              </div>
+
+              <div style="background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; padding: 1rem;">
+                <div style="font-size: 0.88rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem;" id="rulesCardTitle">
+                  📋 Category Quality Specification
+                </div>
+                <div style="font-size: 0.78rem; color: var(--text-secondary);">
+                  <div style="font-weight: 600; color: #34d399; margin-bottom: 0.25rem;">✓ Normal Reference Standards:</div>
+                  <ul id="normalRulesList" style="padding-left: 1.1rem; margin-bottom: 0.65rem;"></ul>
+                  <div style="font-weight: 600; color: #f87171; margin-bottom: 0.25rem;">⚠️ Monitored Logical &amp; Structural Faults:</div>
+                  <ul id="defectRulesList" style="padding-left: 1.1rem;"></ul>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 2: INSPECTION HISTORY -->
+    <section id="tab-history" class="tab-panel">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📜 User Inspection Audit Log</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Refresh Log</button>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Timestamp</th>
+                <th>File Name</th>
+                <th>Category</th>
+                <th>Verdict</th>
+                <th>Score / Cutoff</th>
+                <th>Severity</th>
+                <th>Primary Zone</th>
+                <th>Diagnostic Summary</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <tr><td colspan="9" style="text-align: center; color: var(--text-muted);">No inspections recorded yet.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: MODEL BENCHMARKS & ANALYTICS -->
+    <section id="tab-analytics" class="tab-panel">
+      <div class="card" style="margin-bottom: 1.5rem;">
+        <div class="card-header">
+          <div class="card-title">📊 Multi-Category MVTec LOCO AD Generalization Benchmarks</div>
+          <span style="font-size: 0.8rem; color: var(--text-muted);">WideResNet50 PatchCore Memory Bank + Per-Location Gaussian</span>
+        </div>
+        <div style="overflow-x: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Train / Val / Test Split</th>
+                <th>Image ROC-AUC</th>
+                <th>Precision</th>
+                <th>Recall (μ+3σ)</th>
+                <th>Recall (Optimal F1)</th>
+                <th>F1 (Optimal)</th>
+                <th>Pixel-Level AUROC</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>🍾 Juice Bottle</strong></td>
+                <td>335 / 54 / 330</td>
+                <td><strong>0.896</strong></td>
+                <td>0.991</td>
+                <td>0.466</td>
+                <td><strong>0.864</strong></td>
+                <td><strong>0.879</strong></td>
+                <td>0.872</td>
+              </tr>
+              <tr>
+                <td><strong>🔌 Splicing Connectors</strong></td>
+                <td>360 / 60 / 312</td>
+                <td><strong>0.807</strong></td>
+                <td>0.990</td>
+                <td>0.492</td>
+                <td><strong>0.768</strong></td>
+                <td><strong>0.812</strong></td>
+                <td>0.854</td>
+              </tr>
+              <tr>
+                <td><strong>🍱 Breakfast Box</strong></td>
+                <td>351 / 62 / 275</td>
+                <td><strong>0.770</strong></td>
+                <td>0.971</td>
+                <td>0.393</td>
+                <td><strong>0.745</strong></td>
+                <td><strong>0.782</strong></td>
+                <td>0.841</td>
+              </tr>
+              <tr>
+                <td><strong>📌 Pushpins Box</strong></td>
+                <td>372 / 69 / 310</td>
+                <td><strong>0.770</strong></td>
+                <td>0.960</td>
+                <td>0.140</td>
+                <td><strong>0.712</strong></td>
+                <td><strong>0.756</strong></td>
+                <td>0.815</td>
+              </tr>
+              <tr>
+                <td><strong>🔩 Hardware Screw Bag</strong></td>
+                <td>360 / 60 / 341</td>
+                <td><strong>0.745</strong></td>
+                <td>1.000</td>
+                <td>0.233</td>
+                <td><strong>0.708</strong></td>
+                <td><strong>0.764</strong></td>
+                <td>0.828</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📈 ROC Curve &amp; Threshold Trade-off (Juice Bottle)</div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+            <img src="/outputs/roc_curve_juice_bottle.png" alt="ROC Curve" style="width: 100%; border-radius: 8px; cursor: zoom-in;" onclick="openLightbox(this.src)" />
+            <img src="/outputs/threshold_sweep_juice_bottle.png" alt="Threshold Sweep" style="width: 100%; border-radius: 8px; cursor: zoom-in;" onclick="openLightbox(this.src)" />
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔬 Three-Way Architecture Comparison (Juice Bottle)</div>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Model Architecture</th>
+                <th>ROC-AUC</th>
+                <th>Precision</th>
+                <th>Recall</th>
+                <th>F1-Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Baseline (ResNet18, Full 343k Memory Bank, kNN)</td>
+                <td>0.881</td>
+                <td>0.973</td>
+                <td>0.614</td>
+                <td>0.753</td>
+              </tr>
+              <tr>
+                <td>Main (WideResNet50, 10% Coreset Memory Bank, kNN)</td>
+                <td><strong>0.896</strong></td>
+                <td>0.991</td>
+                <td>0.466 (0.864 opt)</td>
+                <td>0.634 (0.879 opt)</td>
+              </tr>
+              <tr>
+                <td>Statistical (WideResNet50, Fitted Per-Location Gaussian / PaDiM)</td>
+                <td>0.870</td>
+                <td><strong>0.991</strong></td>
+                <td>0.475</td>
+                <td>0.642</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- AUTHENTICATION MODAL (SIGN UP & LOG IN) -->
+  <div id="authModalBackdrop" class="modal-backdrop">
+    <div class="auth-modal">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.6rem;">
+          <div class="brand-logo" style="width: 34px; height: 34px; font-size: 1.05rem;">🔐</div>
+          <div>
+            <div style="font-weight: 800; font-size: 1.05rem; color: #fff;">Inspector Portal Access</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">Sign up or log in to save inspection history</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="closeAuthModal()">✕</button>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tabBtnLogin" onclick="switchAuthTab('login')">Log In</button>
+        <button class="auth-tab" id="tabBtnSignup" onclick="switchAuthTab('signup')">Sign Up</button>
+      </div>
+
+      <div id="authAlertBox" class="alert-box"></div>
+
+      <!-- LOGIN FORM -->
+      <form id="loginForm" onsubmit="submitLogin(event)">
+        <div class="form-group">
+          <label class="form-label" for="loginIdentifier">Username or Email Address</label>
+          <input
+            type="text"
+            id="loginIdentifier"
+            class="form-input"
+            placeholder="e.g. demo or demo@nus.edu.sg"
+            autocomplete="username"
+            required
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="loginPassword">Password</label>
+          <input
+            type="password"
+            id="loginPassword"
+            class="form-input"
+            placeholder="Enter your password"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+        <button type="submit" id="loginSubmitBtn" class="btn btn-primary">
+          🔑 Log In to Inspector
+        </button>
+      </form>
+
+      <!-- SIGN UP FORM -->
+      <form id="signupForm" style="display: none;" onsubmit="submitSignup(event)">
+        <div class="form-group">
+          <label class="form-label" for="signupFullName">Full Name</label>
+          <input
+            type="text"
+            id="signupFullName"
+            class="form-input"
+            placeholder="e.g. Alex Tan"
+            autocomplete="name"
+          />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="signupUsername">Username *</label>
+            <input
+              type="text"
+              id="signupUsername"
+              class="form-input"
+              placeholder="e.g. alex_tan"
+              autocomplete="username"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="signupRole">Role</label>
+            <select id="signupRole" class="form-select">
+              <option value="Quality Inspector">Quality Inspector</option>
+              <option value="Lead Quality Engineer">Lead Quality Engineer</option>
+              <option value="Manufacturing Manager">Manufacturing Manager</option>
+              <option value="ML Researcher">ML Researcher</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="signupEmail">Email Address *</label>
+          <input
+            type="email"
+            id="signupEmail"
+            class="form-input"
+            placeholder="e.g. alex@nus.edu.sg"
+            autocomplete="email"
+            required
+          />
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+          <div class="form-group">
+            <label class="form-label" for="signupPassword">Password (min 4 chars) *</label>
+            <input
+              type="password"
+              id="signupPassword"
+              class="form-input"
+              placeholder="Create password"
+              autocomplete="new-password"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="signupConfirmPassword">Confirm Password *</label>
+            <input
+              type="password"
+              id="signupConfirmPassword"
+              class="form-input"
+              placeholder="Confirm password"
+              autocomplete="new-password"
+              required
+            />
+          </div>
+        </div>
+        <button type="submit" id="signupSubmitBtn" class="btn btn-primary">
+          ✨ Create Account &amp; Sign In
+        </button>
+      </form>
+
+      <div class="divider">OR INSTANT ACCESS</div>
+
+      <button type="button" class="btn btn-secondary" style="width: 100%;" onclick="handleDemoLogin()">
+        ⚡ 1-Click Demo Inspector Login (demo@nus.edu.sg)
+      </button>
+    </div>
+  </div>
+
+  <!-- Image Zoom Lightbox -->
+  <div id="lightbox" class="lightbox" onclick="closeLightbox()">
+    <img id="lightboxImg" src="" alt="Zoomed view" />
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
