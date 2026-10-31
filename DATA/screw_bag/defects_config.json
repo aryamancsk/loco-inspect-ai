@@ -1,0 +1,122 @@
+[
+    {
+        "defect_name": "screw_too_long",
+        "pixel_value": 255,
+        "saturation_threshold": 9000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "screw_too_short",
+        "pixel_value": 254,
+        "saturation_threshold": 9000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_very_short_screw",
+        "pixel_value": 253,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "2_very_short_screws",
+        "pixel_value": 252,
+        "saturation_threshold": 18000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_additional_long_screw",
+        "pixel_value": 251,
+        "saturation_threshold": 29600,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_additional_short_screw",
+        "pixel_value": 250,
+        "saturation_threshold": 20600,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_additional_nut",
+        "pixel_value": 249,
+        "saturation_threshold": 7500,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "2_additional_nuts",
+        "pixel_value": 248,
+        "saturation_threshold": 15000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_additional_washer",
+        "pixel_value": 247,
+        "saturation_threshold": 5500,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "2_additional_washers",
+        "pixel_value": 246,
+        "saturation_threshold": 11000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_missing_long_screw",
+        "pixel_value": 245,
+        "saturation_threshold": 29600,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_missing_short_screw",
+        "pixel_value": 244,
+        "saturation_threshold": 20600,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_missing_nut",
+        "pixel_value": 243,
+        "saturation_threshold": 7500,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "2_missing_nuts",
+        "pixel_value": 242,
+        "saturation_threshold": 15000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "1_missing_washer",
+        "pixel_value": 241,
+        "saturation_threshold": 5500,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "2_missing_washers",
+        "pixel_value": 240,
+        "saturation_threshold": 11000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "bag_broken",
+        "pixel_value": 239,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "color",
+        "pixel_value": 238,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "contamination",
+        "pixel_value": 237,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "part_broken",
+        "pixel_value": 236,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    }
+]
