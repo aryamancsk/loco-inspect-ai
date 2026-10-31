@@ -1,0 +1,128 @@
+[
+    {
+        "defect_name": "wrong_connector_type_5_2",
+        "pixel_value": 255,
+        "saturation_threshold": 67100,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "wrong_connector_type_5_3",
+        "pixel_value": 254,
+        "saturation_threshold": 44300,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "wrong_connector_type_3_2",
+        "pixel_value": 253,
+        "saturation_threshold": 22100,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "cable_too_short_T2",
+        "pixel_value": 252,
+        "saturation_threshold": 53300,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "cable_too_short_T3",
+        "pixel_value": 251,
+        "saturation_threshold": 76100,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "cable_too_short_T5",
+        "pixel_value": 250,
+        "saturation_threshold": 120000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "missing_connector",
+        "pixel_value": 249,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "missing_connector_and_cable",
+        "pixel_value": 248,
+        "saturation_threshold": 103600,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "missing_cable",
+        "pixel_value": 247,
+        "saturation_threshold": 18000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "extra_cable",
+        "pixel_value": 246,
+        "saturation_threshold": 0.5,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "cable_color",
+        "pixel_value": 245,
+        "saturation_threshold": 18000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "broken_cable",
+        "pixel_value": 244,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "cable_cut",
+        "pixel_value": 243,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "cable_not_plugged",
+        "pixel_value": 242,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "unknown_cable_color",
+        "pixel_value": 241,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "wrong_cable_location",
+        "pixel_value": 240,
+        "saturation_threshold": 18000,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "flipped_connector",
+        "pixel_value": 239,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "broken_connector",
+        "pixel_value": 238,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "open_lever",
+        "pixel_value": 237,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "color",
+        "pixel_value": 236,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "contamination",
+        "pixel_value": 235,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    }
+]
