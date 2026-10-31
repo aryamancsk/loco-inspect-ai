@@ -16,6 +16,10 @@ DATA/
 *.zip
 *.tar.gz
 
+# Standalone zip/unzipped bundles
+LOCO_Inspect_AI_Runnable_Code/
+LOCO_Inspect_AI_Runnable_Code.zip
+
 # Large Memory Bank Caches (>100 MB GitHub limit)
 *.joblib
 outputs/*.joblib
@@ -32,6 +36,7 @@ Untitled-1.ipynb
 .gradio/
 .system_generated/
 *.tmp
+*.backup.ipynb
 
 # Operating System Files
 .DS_Store

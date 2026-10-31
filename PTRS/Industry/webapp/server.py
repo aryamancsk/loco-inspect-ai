@@ -333,34 +333,6 @@ if OUTPUT_DIR.exists():
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
-@app.get("/download-individual-report")
-async def download_individual_report():
-    pdf_path = (WEBAPP_DIR.parent / "INDIVIDUAL_PROJECT_REPORT.pdf").resolve()
-    if not pdf_path.exists():
-        pdf_path = (WEBAPP_DIR.parent.parent.parent / "INDIVIDUAL_PROJECT_REPORT.pdf").resolve()
-    if pdf_path.exists():
-        return FileResponse(
-            str(pdf_path),
-            media_type="application/pdf",
-            filename="NUS_ISS_Individual_Project_Report_Aryaman.pdf",
-        )
-    return JSONResponse(status_code=404, content={"ok": False, "message": "Individual report PDF not found."})
-
-
-@app.get("/download-report")
-async def download_report():
-    pdf_path = (WEBAPP_DIR.parent / "FINAL_PROJECT_REPORT.pdf").resolve()
-    if not pdf_path.exists():
-        pdf_path = (WEBAPP_DIR.parent.parent.parent / "FINAL_PROJECT_REPORT.pdf").resolve()
-    if pdf_path.exists():
-        return FileResponse(
-            str(pdf_path),
-            media_type="application/pdf",
-            filename="NUS_ISS_Final_Project_Report_LOCO_Inspect_AI.pdf",
-        )
-    return JSONResponse(status_code=404, content={"ok": False, "message": "PDF report not found."})
-
-
 @app.get("/", response_class=HTMLResponse)
 async def index_page():
     index_file = STATIC_DIR / "index.html"

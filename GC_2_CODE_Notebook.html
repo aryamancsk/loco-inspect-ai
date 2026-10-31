@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GC_2_CODE_Web_App_Fixed_v2.ipynb — Complete Jupyter Notebook Viewer</title>
+<style>
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background: #f8fafc;
+        color: #0f172a;
+        padding: 30px 20px;
+        line-height: 1.5;
+    }
+    .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 40px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+    }
+    h1 {
+        color: #0a2540;
+        font-size: 24px;
+        margin-bottom: 6px;
+    }
+    .subtitle {
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .cell {
+        margin-bottom: 20px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        overflow: hidden;
+    }
+    .cell-label {
+        background: #f1f5f9;
+        font-size: 11px;
+        font-weight: 700;
+        color: #475569;
+        padding: 6px 14px;
+        border-bottom: 1px solid #e2e8f0;
+        font-family: monospace;
+    }
+    .md-cell {
+        background: #ffffff;
+    }
+    .md-content {
+        padding: 14px 16px;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 13.5px;
+        white-space: pre-wrap;
+        color: #1e293b;
+    }
+    .code-cell {
+        background: #0f172a;
+    }
+    .code-cell .cell-label {
+        background: #1e293b;
+        color: #94a3b8;
+        border-color: #334155;
+    }
+    .code-content {
+        padding: 14px 16px;
+        margin: 0;
+        font-family: 'JetBrains Mono', Consolas, monospace;
+        font-size: 12.5px;
+        line-height: 1.5;
+        color: #f8fafc;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <h1>📓 GC_2_CODE_Web_App_Fixed_v2.ipynb</h1>
+    <div class="subtitle">Complete 51-Cell Jupyter Notebook | Candidate: Aryaman Srimali Jain | Group 19</div>
+    
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 1]</div>
+            <pre class="md-content"># MVTec LOCO AD — Logical Defect Detection Pipeline
+
+Self-contained, end-to-end notebook: dataset check → feature extraction → memory bank →
+threshold → scoring → evaluation → visualization.
+
+**Before running:** set `DATA_ROOT` and `CATEGORY` in the config cell below to match where
+you extracted the dataset. Then Run All.</pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 2]</div>
+            <pre class="md-content">## 0. Install / imports</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [3]: Python Code</div>
+            <pre class="code-content"><code># If any of these are missing, uncomment and run once:
+# !pip install torch torchvision scikit-learn matplotlib pillow numpy joblib
+
+import os
+import json as _json
+import threading
+import warnings
+from pathlib import Path
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+import torchvision
+from torchvision import transforms
+from torch.utils.data import Dataset, DataLoader
+
+from PIL import Image
+import matplotlib.pyplot as plt
+
+from sklearn.neighbors import NearestNeighbors
+from sklearn.random_projection import SparseRandomProjection
+from sklearn.metrics import roc_auc_score, precision_recall_fscore_support, confusion_matrix
+
+import joblib
+import pandas as pd
+
+# Serialises access to the shared feature extractor (its forward hooks keep state in a dict,
+# so two simultaneous calls -- e.g. two web-app users -- would corrupt each other).
+_INFER_LOCK = threading.Lock()
+
+print(&quot;Imports OK&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 4]</div>
+            <pre class="md-content">## 1. Configuration
+
+Edit `DATA_ROOT` to point at the folder that directly contains `breakfast_box/`,
+`juice_bottle/`, `pushpins/`, `screw_bag/`, `splicing_connectors/`.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [5]: Python Code</div>
+            <pre class="code-content"><code>CATEGORY = &quot;juice_bottle&quot;             # breakfast_box | juice_bottle | pushpins | screw_bag | splicing_connectors
+
+
+def find_data_root(category):
+    &quot;&quot;&quot;Look for the folder that directly contains &lt;category&gt;/ in the usual places.
+    Override by setting the MVTEC_LOCO_ROOT environment variable, or just assign DATA_ROOT below.&quot;&quot;&quot;
+    candidates = []
+    env = os.environ.get(&quot;MVTEC_LOCO_ROOT&quot;)
+    if env:
+        candidates.append(Path(env))
+    cwd = Path.cwd()
+    for base in (cwd, cwd.parent, cwd.parent.parent):
+        for name in (&quot;DATA&quot;, &quot;data&quot;, &quot;mvtec_loco_ad&quot;, &quot;mvtec_loco_anomaly_detection&quot;):
+            candidates.append(base / name)
+    candidates.append(Path.home() / &quot;Downloads&quot; / &quot;mvtec_loco_anomaly_detection&quot;)
+    for c in candidates:
+        if (c / category).exists():
+            return c, candidates
+        if c.exists() and c.is_dir():          # one extra nesting level, e.g. DATA/mvtec_loco_anomaly_detection/
+            for sub_dir in c.iterdir():
+                if sub_dir.is_dir() and (sub_dir / category).exists():
+                    return sub_dir, candidates
+    return None, candidates
+
+
+_found_root, _tried = find_data_root(CATEGORY)
+DATA_ROOT = _found_root if _found_root is not None else Path.cwd() / &quot;DATA&quot;   # &lt;-- or set your own path here
+OUTPUT_DIR = Path(&quot;./outputs&quot;)
+OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
+
+IMAGE_SIZE = 256
+BATCH_SIZE = 8
+NUM_WORKERS = 0   # set to 0 to avoid multiprocessing issues inside notebooks
+
+BACKBONE_LAYERS = [&quot;layer2&quot;, &quot;layer3&quot;]
+DEVICE = torch.device(&quot;cuda&quot; if torch.cuda.is_available() else &quot;cpu&quot;)
+
+COOSET_SAMPLING_RATIO = 0.1
+N_NEIGHBORS = 1
+N_STD_FOR_THRESHOLD = 3.0
+
+print(f&quot;Device: {DEVICE}&quot;)
+print(f&quot;Category: {CATEGORY}&quot;)
+print(f&quot;Dataset root: {DATA_ROOT}  (exists: {DATA_ROOT.exists()})&quot;)
+
+assert (DATA_ROOT / CATEGORY).exists(), (
+    f&quot;Could not find {CATEGORY!r} under {DATA_ROOT}. Searched:\n  &quot; + &quot;\n  &quot;.join(str(p) for p in _tried)
+    + &quot;\nSet DATA_ROOT (or the MVTEC_LOCO_ROOT environment variable) to the folder that directly contains &quot;
+    + &quot;breakfast_box/, juice_bottle/, pushpins/, screw_bag/ and splicing_connectors/.&quot;
+)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 6]</div>
+            <pre class="md-content">## 2. Dataset classes
+
+Wraps the `train/` `validation/` `test/{good,logical_anomalies,structural_anomalies}` layout.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [7]: Python Code</div>
+            <pre class="code-content"><code>def get_transform():
+    return transforms.Compose([
+        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+
+class NormalImageDataset(Dataset):
+    &quot;&quot;&quot;Loads train/ or validation/ images (all normal, label always 0).&quot;&quot;&quot;
+
+    def __init__(self, category: str, split: str):
+        assert split in (&quot;train&quot;, &quot;validation&quot;)
+        folder = DATA_ROOT / category / split
+        # Some extractions nest images one level deeper (e.g. train/good/*.png)
+        # rather than directly in train/, so search recursively to handle both.
+        self.files = sorted(folder.rglob(&quot;*.png&quot;))
+        if not self.files:
+            raise FileNotFoundError(f&quot;No images found in {folder} (searched recursively)&quot;)
+        self.transform = get_transform()
+
+    def __len__(self):
+        return len(self.files)
+
+    def __getitem__(self, idx):
+        img = Image.open(self.files[idx]).convert(&quot;RGB&quot;)
+        return self.transform(img), str(self.files[idx])
+
+
+class TestImageDataset(Dataset):
+    &quot;&quot;&quot;Loads all test images with image-level label (0=good, 1=anomalous) and subtype.&quot;&quot;&quot;
+
+    def __init__(self, category: str):
+        self.category = category
+        self.samples = []
+        test_root = DATA_ROOT / category / &quot;test&quot;
+        for subtype in [&quot;good&quot;, &quot;logical_anomalies&quot;, &quot;structural_anomalies&quot;]:
+            folder = test_root / subtype
+            if not folder.exists():
+                continue
+            label = 0 if subtype == &quot;good&quot; else 1
+            for f in sorted(folder.rglob(&quot;*.png&quot;)):
+                self.samples.append((f, label, subtype))
+        if not self.samples:
+            raise FileNotFoundError(f&quot;No test images found under {test_root}&quot;)
+        self.transform = get_transform()
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        path, label, subtype = self.samples[idx]
+        img = Image.open(path).convert(&quot;RGB&quot;)
+        return self.transform(img), label, subtype, str(path)
+
+    def ground_truth_mask_path(self, image_path: str):
+        p = Path(image_path)
+        subtype = next((s for s in (&quot;logical_anomalies&quot;, &quot;structural_anomalies&quot;, &quot;good&quot;) if s in p.parts), p.parent.name)
+        if subtype == &quot;good&quot;:
+            return None
+        gt_dir = DATA_ROOT / self.category / &quot;ground_truth&quot; / subtype / p.stem
+        candidates = sorted(gt_dir.glob(&quot;*.png&quot;)) if gt_dir.exists() else []
+        return candidates[0] if candidates else None
+
+
+train_ds = NormalImageDataset(CATEGORY, &quot;train&quot;)
+val_ds = NormalImageDataset(CATEGORY, &quot;validation&quot;)
+test_ds = TestImageDataset(CATEGORY)
+
+print(f&quot;Train (normal): {len(train_ds)}&quot;)
+print(f&quot;Validation (normal): {len(val_ds)}&quot;)
+print(f&quot;Test: {len(test_ds)}&quot;)
+labels = [s[1] for s in test_ds.samples]
+print(f&quot;  good: {labels.count(0)}, anomalous: {labels.count(1)}&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 8]</div>
+            <pre class="md-content">## 3. Quick visual sanity check
+
+Shows one normal train image and one of each test subtype.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [9]: Python Code</div>
+            <pre class="code-content"><code>def _peek(folder, n=1):
+    return sorted(Path(folder).rglob(&quot;*.png&quot;))[:n]   # train/ keeps its images in a good/ sub-folder
+
+fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+paths_to_show = [
+    (&quot;train (normal)&quot;, (DATA_ROOT / CATEGORY / &quot;train&quot;)),
+    (&quot;test/good&quot;, (DATA_ROOT / CATEGORY / &quot;test&quot; / &quot;good&quot;)),
+    (&quot;test/logical_anomalies&quot;, (DATA_ROOT / CATEGORY / &quot;test&quot; / &quot;logical_anomalies&quot;)),
+    (&quot;test/structural_anomalies&quot;, (DATA_ROOT / CATEGORY / &quot;test&quot; / &quot;structural_anomalies&quot;)),
+]
+for ax, (title, folder) in zip(axes, paths_to_show):
+    files = _peek(folder)
+    if files:
+        ax.imshow(Image.open(files[0]))
+    ax.set_title(title, fontsize=9)
+    ax.axis(&quot;off&quot;)
+plt.tight_layout()
+plt.show()
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 10]</div>
+            <pre class="md-content">## 4. Pretrained feature extractor
+
+WideResNet50 backbone with forward hooks on mid-level layers (patch-level features).</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [11]: Python Code</div>
+            <pre class="code-content"><code>_BACKBONE_BUILDERS = {
+    &quot;wide_resnet50_2&quot;: lambda: torchvision.models.wide_resnet50_2(weights=&quot;IMAGENET1K_V2&quot;),
+    &quot;resnet18&quot;: lambda: torchvision.models.resnet18(weights=&quot;IMAGENET1K_V1&quot;),
+}
+
+
+def load_backbone(name):
+    &quot;&quot;&quot;Build a pretrained backbone. The weights are downloaded once and cached; if the download is
+    blocked (offline / firewall / DNS error) raise a message that says how to fix it.&quot;&quot;&quot;
+    try:
+        return _BACKBONE_BUILDERS[name]()
+    except KeyError:
+        raise ValueError(f&quot;Unknown backbone {name!r}; choose from {list(_BACKBONE_BUILDERS)}&quot;)
+    except Exception as exc:                       # URLError, socket.gaierror, HTTP errors, corrupt cache ...
+        ckpt_dir = Path(torch.hub.get_dir()) / &quot;checkpoints&quot;
+        raise RuntimeError(
+            f&quot;Could not load pretrained weights for {name!r}: {type(exc).__name__}: {exc}\n&quot;
+            f&quot;The weights are downloaded from download.pytorch.org on first use. Either allow that &quot;
+            f&quot;domain / reconnect, or download the .pth file in a browser and copy it into:\n  {ckpt_dir}&quot;
+        ) from exc
+
+
+class _BackboneRegistry(dict):
+    &quot;&quot;&quot;Keeps the old BACKBONES[name]() calling style working.&quot;&quot;&quot;
+    def __missing__(self, key):
+        return lambda: load_backbone(key)
+
+
+BACKBONES = _BackboneRegistry({k: (lambda k=k: load_backbone(k)) for k in _BACKBONE_BUILDERS})
+
+
+class PatchFeatureExtractor:
+    def __init__(self, layers=None, device=None, backbone_name=&quot;wide_resnet50_2&quot;):
+        self.layers = layers or BACKBONE_LAYERS
+        self.device = device or DEVICE
+        self.backbone_name = backbone_name
+
+        self.backbone = BACKBONES[backbone_name]()
+        self.backbone.eval().to(self.device)
+        for p in self.backbone.parameters():
+            p.requires_grad = False
+
+        self._features = {}
+        for layer_name in self.layers:
+            layer = getattr(self.backbone, layer_name)
+            layer.register_forward_hook(self._make_hook(layer_name))
+
+    def _make_hook(self, name):
+        def hook(module, inp, out):
+            self._features[name] = out.detach()
+        return hook
+
+    @torch.no_grad()
+    def extract(self, images: torch.Tensor):
+        images = images.to(self.device)
+        self._features = {}
+        _ = self.backbone(images)
+
+        feats = [self._features[l] for l in self.layers]
+        target_size = feats[0].shape[-2:]
+        resized = [F.interpolate(f, size=target_size, mode=&quot;bilinear&quot;, align_corners=False)
+                   for f in feats]
+        combined = torch.cat(resized, dim=1)
+
+        b, c, h, w = combined.shape
+        patch_features = combined.permute(0, 2, 3, 1).reshape(b, h * w, c)
+        return patch_features.cpu(), (h, w)
+
+
+extractor = PatchFeatureExtractor()
+
+# sanity check
+_dummy = torch.randn(2, 3, IMAGE_SIZE, IMAGE_SIZE)
+_feats, _grid = extractor.extract(_dummy)
+print(f&quot;Patch features shape: {_feats.shape}, grid size: {_grid}&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 12]</div>
+            <pre class="md-content">## 5. Build memory bank from train (normal) images
+
+Coreset-subsampled pool of normal patch features + a fitted nearest-neighbor index.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [13]: Python Code</div>
+            <pre class="code-content"><code>def greedy_coreset_sampling(features: np.ndarray, sampling_ratio: float, seed: int = 0):
+    # Runs the distance computation on GPU (if available) via torch -- this loop does
+    # n_select iterations, each comparing against the full pool, so it benefits
+    # enormously from GPU parallelism at typical patch-pool sizes.
+    n_select = max(1, int(len(features) * sampling_ratio))
+    rng = np.random.default_rng(seed)
+
+    try:
+        projector = SparseRandomProjection(n_components=&quot;auto&quot;, eps=0.9, random_state=seed)
+        projected = projector.fit_transform(features)
+    except ValueError:
+        # &quot;auto&quot; can ask for more dimensions than low-dimensional features have -&gt; skip the projection
+        projected = features
+
+    projected_t = torch.tensor(projected, dtype=torch.float32, device=DEVICE)
+    n = projected_t.shape[0]
+
+    selected = [int(rng.integers(0, n))]
+    min_dists = torch.norm(projected_t - projected_t[selected[0]], dim=1)
+
+    for _ in range(n_select - 1):
+        next_idx = int(torch.argmax(min_dists).item())
+        selected.append(next_idx)
+        new_dists = torch.norm(projected_t - projected_t[next_idx], dim=1)
+        min_dists = torch.minimum(min_dists, new_dists)
+
+    return features[selected]
+
+
+class TorchNN:
+    &quot;&quot;&quot;Exact nearest-neighbour search on the GPU (CPU fallback) with sklearn&#x27;s .kneighbors() interface.
+    The brute-force sklearn search is far too slow for the 343k-patch baseline bank.&quot;&quot;&quot;
+
+    def __init__(self, bank, n_neighbors=1, device=None, chunk=512):
+        self.bank = np.ascontiguousarray(bank, dtype=np.float32)
+        self.n_neighbors = n_neighbors
+        self.device = device or DEVICE
+        self.chunk = chunk
+        self._bank_t = None
+
+    def kneighbors(self, X, n_neighbors=None):
+        k = min(n_neighbors or self.n_neighbors, len(self.bank))
+        if self._bank_t is None:
+            self._bank_t = torch.from_numpy(self.bank).to(self.device)
+        X = np.ascontiguousarray(X, dtype=np.float32)
+        dists, idxs = [], []
+        with torch.no_grad():
+            for start in range(0, len(X), self.chunk):
+                q = torch.from_numpy(X[start:start + self.chunk]).to(self.device)
+                d = torch.cdist(q, self._bank_t)
+                vals, ind = torch.topk(d, k=k, dim=1, largest=False)
+                dists.append(vals.cpu().numpy())
+                idxs.append(ind.cpu().numpy())
+        return np.concatenate(dists), np.concatenate(idxs)
+
+
+train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, shuffle=False)
+
+all_patches = []
+grid_size = None
+for images, _ in train_loader:
+    patch_feats, grid_size = extractor.extract(images)
+    b, n, c = patch_feats.shape
+    all_patches.append(patch_feats.reshape(b * n, c).numpy())
+
+pool = np.concatenate(all_patches, axis=0)
+print(f&quot;Total normal patches collected: {pool.shape[0]} (dim={pool.shape[1]})&quot;)
+
+memory_bank = greedy_coreset_sampling(pool, COOSET_SAMPLING_RATIO)
+print(f&quot;Memory bank size after coreset sampling: {memory_bank.shape[0]}&quot;)
+
+nn_index = TorchNN(memory_bank, n_neighbors=N_NEIGHBORS)
+
+# Only plain arrays are saved (a GPU-backed index cannot be pickled reliably); rebuild with TorchNN(bank).
+joblib.dump({&quot;memory_bank&quot;: memory_bank, &quot;grid_size&quot;: grid_size},
+            OUTPUT_DIR / f&quot;memory_bank_{CATEGORY}.joblib&quot;)
+print(&quot;Memory bank saved.&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 14]</div>
+            <pre class="md-content">## 6. Scoring function
+
+Given patch features for one image, returns an image-level anomaly score and a spatial anomaly map.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [15]: Python Code</div>
+            <pre class="code-content"><code>def score_image(patch_features: np.ndarray, nn_index, grid_size, out_size=IMAGE_SIZE, topk=1):
+    dists, _ = nn_index.kneighbors(patch_features)
+    patch_scores = dists.mean(axis=1)
+
+    h, w = grid_size
+    score_map = torch.tensor(patch_scores, dtype=torch.float32).reshape(1, 1, h, w)
+    upsampled = F.interpolate(score_map, size=(out_size, out_size), mode=&quot;bilinear&quot;,
+                               align_corners=False).squeeze().numpy()
+
+    top_scores = np.sort(patch_scores)[::-1][:topk]
+    image_score = float(top_scores.mean())
+    return image_score, upsampled
+
+
+print(&quot;score_image() defined&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 16]</div>
+            <pre class="md-content">## 7. Determine decision threshold from validation set
+
+Validation images are normal-only, so this gives a data-driven cutoff without peeking at test-set anomalies.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [17]: Python Code</div>
+            <pre class="code-content"><code>val_scores = []
+for img_tensor, _ in val_ds:
+    patch_feats, _ = extractor.extract(img_tensor.unsqueeze(0))
+    score, _ = score_image(patch_feats.squeeze(0).numpy(), nn_index, grid_size)
+    val_scores.append(score)
+
+val_scores = np.array(val_scores)
+THRESHOLD = float(val_scores.mean() + N_STD_FOR_THRESHOLD * val_scores.std())
+
+print(f&quot;Validation scores: mean={val_scores.mean():.3f}, std={val_scores.std():.3f}&quot;)
+print(f&quot;Chosen threshold: {THRESHOLD:.3f}&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 18]</div>
+            <pre class="md-content">## 8. Score the full test set
+
+Runs every test image (good + logical + structural anomalies) through the pipeline.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [19]: Python Code</div>
+            <pre class="code-content"><code>image_scores, labels, subtypes, paths, anomaly_maps = [], [], [], [], []
+
+for img_tensor, label, subtype, path in test_ds:
+    patch_feats, _ = extractor.extract(img_tensor.unsqueeze(0))
+    score, amap = score_image(patch_feats.squeeze(0).numpy(), nn_index, grid_size)
+
+    image_scores.append(score)
+    labels.append(label)
+    subtypes.append(subtype)
+    paths.append(path)
+    anomaly_maps.append(amap)
+
+image_scores = np.array(image_scores)
+labels = np.array(labels)
+
+print(f&quot;Scored {len(image_scores)} test images.&quot;)
+print(f&quot;Score range: {image_scores.min():.3f} - {image_scores.max():.3f}&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 20]</div>
+            <pre class="md-content">## 9. Evaluation
+
+Overall image-level metrics, plus a breakdown by anomaly subtype (logical vs structural).</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [21]: Python Code</div>
+            <pre class="code-content"><code>auc = roc_auc_score(labels, image_scores)
+preds = (image_scores &gt; THRESHOLD).astype(int)
+precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average=&quot;binary&quot;, zero_division=0)
+cm = confusion_matrix(labels, preds)
+
+print(&quot;--- Overall image-level results ---&quot;)
+print(f&quot;ROC-AUC:   {auc:.3f}&quot;)
+print(f&quot;Precision: {precision:.3f}&quot;)
+print(f&quot;Recall:    {recall:.3f}&quot;)
+print(f&quot;F1-score:  {f1:.3f}&quot;)
+print(f&quot;Confusion matrix:\n{cm}&quot;)
+
+print(&quot;\n--- Breakdown by subtype ---&quot;)
+for subtype in [&quot;good&quot;, &quot;logical_anomalies&quot;, &quot;structural_anomalies&quot;]:
+    idx = [i for i, s in enumerate(subtypes) if s == subtype]
+    if not idx:
+        continue
+    sub_scores = image_scores[idx]
+    sub_preds = (sub_scores &gt; THRESHOLD).astype(int)
+    if subtype == &quot;good&quot;:
+        rate = 1 - sub_preds.mean()
+        print(f&quot;{subtype:22s}: {len(idx)} images, correctly-normal rate = {rate:.3f}&quot;)
+    else:
+        rate = sub_preds.mean()
+        print(f&quot;{subtype:22s}: {len(idx)} images, detection rate = {rate:.3f}&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 22]</div>
+            <pre class="md-content">## 10. Demo visualization
+
+Original image / anomaly heatmap / overlay, for a few examples of each subtype -- this is the artifact for your report and video.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [23]: Python Code</div>
+            <pre class="code-content"><code>def show_result(image_path, anomaly_map, score, threshold, label, subtype, save_path=None):
+    img = Image.open(image_path).convert(&quot;RGB&quot;).resize((IMAGE_SIZE, IMAGE_SIZE))
+    decision = &quot;ANOMALOUS&quot; if score &gt; threshold else &quot;NORMAL&quot;
+    truth = &quot;anomalous&quot; if label == 1 else &quot;normal&quot;
+
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+
+    axes[0].imshow(img)
+    axes[0].set_title(f&quot;Input\n(ground truth: {truth} / {subtype})&quot;)
+    axes[0].axis(&quot;off&quot;)
+
+    axes[1].imshow(anomaly_map, cmap=&quot;jet&quot;)
+    axes[1].set_title(f&quot;Anomaly map\nscore={score:.3f} (thr={threshold:.3f})&quot;)
+    axes[1].axis(&quot;off&quot;)
+
+    axes[2].imshow(img)
+    axes[2].imshow(anomaly_map, cmap=&quot;jet&quot;, alpha=0.5)
+    axes[2].set_title(f&quot;Overlay\nPrediction: {decision}&quot;)
+    axes[2].axis(&quot;off&quot;)
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=150)
+    plt.show()
+    plt.close(fig)
+
+
+demo_dir = OUTPUT_DIR / &quot;demo&quot;
+demo_dir.mkdir(exist_ok=True)
+
+N_EXAMPLES_PER_SUBTYPE = 2
+for subtype in [&quot;good&quot;, &quot;logical_anomalies&quot;, &quot;structural_anomalies&quot;]:
+    idx = [i for i, s in enumerate(subtypes) if s == subtype][:N_EXAMPLES_PER_SUBTYPE]
+    for i in idx:
+        show_result(
+            image_path=paths[i],
+            anomaly_map=anomaly_maps[i],
+            score=image_scores[i],
+            threshold=THRESHOLD,
+            label=labels[i],
+            subtype=subtype,
+            save_path=demo_dir / f&quot;{subtype}_{i}.png&quot;,
+        )
+
+print(f&quot;Demo images saved under {demo_dir}/&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 24]</div>
+            <pre class="md-content">## 11. Baseline model (for comparison)
+
+The main model above uses WideResNet50 features with a coreset-subsampled memory bank.
+As a simpler baseline (Section 2.6 of the project doc), this reruns the same pipeline with
+a smaller backbone (ResNet18) and the *full* patch pool as the memory bank (no coreset
+subsampling) -- a more naive nearest-neighbor approach.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [25]: Python Code</div>
+            <pre class="code-content"><code>def run_full_pipeline(backbone_name, coreset_ratio, n_std_threshold=N_STD_FOR_THRESHOLD):
+    &quot;&quot;&quot;Runs feature extraction -&gt; memory bank -&gt; threshold -&gt; test scoring -&gt; metrics
+    for a given backbone/coreset configuration. Reuses train_ds/val_ds/test_ds already loaded.&quot;&quot;&quot;
+    print(f&quot;\n=== Running pipeline: backbone={backbone_name}, coreset_ratio={coreset_ratio} ===&quot;)
+    ext = PatchFeatureExtractor(backbone_name=backbone_name)   # raises a clear error if weights can&#x27;t be fetched
+
+    loader = DataLoader(train_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, shuffle=False)
+    all_patches = []
+    grid = None
+    for images, _ in loader:
+        pf, grid = ext.extract(images)
+        b, n, c = pf.shape
+        all_patches.append(pf.reshape(b * n, c).numpy())
+    pool = np.concatenate(all_patches, axis=0)
+
+    mb = greedy_coreset_sampling(pool, coreset_ratio) if coreset_ratio &lt; 1.0 else pool
+    print(f&quot;Memory bank size: {mb.shape[0]} (from pool of {pool.shape[0]})&quot;)
+    idx = TorchNN(mb, n_neighbors=N_NEIGHBORS)
+
+    val_scores_ = []
+    for img_t, _ in val_ds:
+        pf, _ = ext.extract(img_t.unsqueeze(0))
+        s, _ = score_image(pf.squeeze(0).numpy(), idx, grid)
+        val_scores_.append(s)
+    val_scores_ = np.array(val_scores_)
+    thr = float(val_scores_.mean() + n_std_threshold * val_scores_.std())
+
+    scores_, labels_, subtypes_, paths_, amaps_ = [], [], [], [], []
+    for img_t, lab, sub, path in test_ds:
+        pf, _ = ext.extract(img_t.unsqueeze(0))
+        s, amap = score_image(pf.squeeze(0).numpy(), idx, grid)
+        scores_.append(s); labels_.append(lab); subtypes_.append(sub)
+        paths_.append(path); amaps_.append(amap)
+    scores_ = np.array(scores_)
+    labels_ = np.array(labels_)
+
+    auc_ = roc_auc_score(labels_, scores_)
+    preds_ = (scores_ &gt; thr).astype(int)
+    p_, r_, f1_, _ = precision_recall_fscore_support(labels_, preds_, average=&quot;binary&quot;, zero_division=0)
+
+    print(f&quot;Threshold: {thr:.3f}&quot;)
+    print(f&quot;ROC-AUC: {auc_:.3f}  Precision: {p_:.3f}  Recall: {r_:.3f}  F1: {f1_:.3f}&quot;)
+
+    return {
+        &quot;backbone&quot;: backbone_name, &quot;coreset_ratio&quot;: coreset_ratio, &quot;threshold&quot;: thr,
+        &quot;auc&quot;: auc_, &quot;precision&quot;: p_, &quot;recall&quot;: r_, &quot;f1&quot;: f1_,
+        &quot;scores&quot;: scores_, &quot;labels&quot;: labels_, &quot;subtypes&quot;: subtypes_,
+        &quot;paths&quot;: paths_, &quot;anomaly_maps&quot;: amaps_,
+    }
+
+
+try:
+    baseline_results = run_full_pipeline(backbone_name=&quot;resnet18&quot;, coreset_ratio=1.0)
+except Exception as exc:
+    baseline_results = None
+    print(f&quot;\nBaseline skipped -- {type(exc).__name__}: {exc}&quot;)
+    print(&quot;The rest of the notebook still runs; the comparison tables will simply omit the baseline row.&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 26]</div>
+            <pre class="md-content">## 12. Baseline vs. Main model comparison
+
+Side-by-side image-level metrics for the two methods (Section 2.6 &quot;Comparison&quot;).</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [27]: Python Code</div>
+            <pre class="code-content"><code>rows = []
+if baseline_results is not None:
+    rows.append({
+        &quot;Model&quot;: &quot;Baseline (ResNet18, full memory bank)&quot;,
+        &quot;ROC-AUC&quot;: baseline_results[&quot;auc&quot;],
+        &quot;Precision&quot;: baseline_results[&quot;precision&quot;],
+        &quot;Recall&quot;: baseline_results[&quot;recall&quot;],
+        &quot;F1&quot;: baseline_results[&quot;f1&quot;],
+    })
+else:
+    print(&quot;(Baseline results unavailable -- see the message from the previous section.)&quot;)
+rows.append({
+    &quot;Model&quot;: &quot;Main (WideResNet50, coreset memory bank)&quot;,
+    &quot;ROC-AUC&quot;: auc,
+    &quot;Precision&quot;: precision,
+    &quot;Recall&quot;: recall,
+    &quot;F1&quot;: f1,
+})
+comparison_df = pd.DataFrame(rows)
+print(comparison_df.to_string(index=False))
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 28]</div>
+            <pre class="md-content">## 13. Pixel-level localization evaluation
+
+Image-level metrics tell you *whether* an image is anomalous. This section evaluates
+*where* -- comparing each anomaly map (from the main model) against the dataset&#x27;s
+pixel-precise ground-truth masks, giving a pixel-level ROC-AUC (Section 2.7&#x27;s
+&quot;dataset-appropriate localization metrics&quot;). Normal (&quot;good&quot;) test images are treated
+as having an all-zero ground-truth mask.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [29]: Python Code</div>
+            <pre class="code-content"><code>def load_gt_mask(image_path: str, subtype: str, out_size: int = IMAGE_SIZE):
+    &quot;&quot;&quot;Loads (and combines, if multiple) ground-truth mask(s) for one test image.
+    Returns a binary (0/1) mask resized to out_size x out_size, or None if not found.&quot;&quot;&quot;
+    if subtype == &quot;good&quot;:
+        return np.zeros((out_size, out_size), dtype=np.uint8)
+
+    p = Path(image_path)
+    gt_dir = DATA_ROOT / CATEGORY / &quot;ground_truth&quot; / subtype / p.stem
+    if not gt_dir.exists():
+        return None
+    mask_files = sorted(gt_dir.rglob(&quot;*.png&quot;))
+    if not mask_files:
+        return None
+
+    combined = None
+    for mf in mask_files:
+        m = np.array(Image.open(mf).convert(&quot;L&quot;).resize((out_size, out_size), Image.NEAREST))   # NEAREST keeps the mask binary
+        m = (m &gt; 0).astype(np.uint8)
+        combined = m if combined is None else np.maximum(combined, m)
+    return combined
+
+
+pixel_scores_all, pixel_labels_all = [], []
+missing = 0
+
+for score, amap, label, subtype, path in zip(image_scores, anomaly_maps, labels, subtypes, paths):
+    gt = load_gt_mask(path, subtype)
+    if gt is None:
+        missing += 1
+        continue
+    pixel_scores_all.append(amap.flatten())
+    pixel_labels_all.append(gt.flatten())
+
+if pixel_scores_all:
+    pixel_scores_all = np.concatenate(pixel_scores_all)
+    pixel_labels_all = np.concatenate(pixel_labels_all)
+    if len(np.unique(pixel_labels_all)) &gt; 1:
+        pixel_auc = roc_auc_score(pixel_labels_all, pixel_scores_all)
+        print(f&quot;Pixel-level ROC-AUC: {pixel_auc:.3f}&quot;)
+    else:
+        print(&quot;Pixel-level AUROC undefined -- ground-truth pixels are all one class &quot;
+              &quot;(check that ground_truth/ masks were found correctly).&quot;)
+else:
+    print(&quot;No ground-truth masks matched -- check the ground_truth/ folder structure &quot;
+          &quot;under DATA_ROOT / CATEGORY.&quot;)
+
+if missing:
+    print(f&quot;Note: {missing} test images had no matching ground-truth mask and were skipped &quot;
+          &quot;(expected for &#x27;good&#x27; images only counted as zero-mask above; investigate if &quot;
+          &quot;this count is unexpectedly high for anomalous subtypes).&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 30]</div>
+            <pre class="md-content">## 14. Qualitative error analysis
+
+Section 2.7 asks for qualitative examples of correct *and incorrect* predictions.
+This pulls out the test images the main model got wrong (false positives and false
+negatives) and displays them alongside their anomaly maps, so you can discuss failure
+patterns in your report -- e.g. whether logical anomalies are disproportionately
+represented among the misses.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [31]: Python Code</div>
+            <pre class="code-content"><code>error_dir = OUTPUT_DIR / &quot;error_analysis&quot;
+error_dir.mkdir(exist_ok=True)
+
+final_preds = (image_scores &gt; THRESHOLD).astype(int)
+false_positives = [i for i in range(len(labels)) if labels[i] == 0 and final_preds[i] == 1]
+false_negatives = [i for i in range(len(labels)) if labels[i] == 1 and final_preds[i] == 0]
+
+print(f&quot;False positives (good images flagged as anomalous): {len(false_positives)}&quot;)
+print(f&quot;False negatives (anomalies missed): {len(false_negatives)}&quot;)
+
+# Breakdown of false negatives by subtype -- this is the key diagnostic for the
+# logical-vs-structural discussion in your report
+if false_negatives:
+    fn_subtypes = [subtypes[i] for i in false_negatives]
+    print(&quot;False negatives by subtype:&quot;,
+          {s: fn_subtypes.count(s) for s in set(fn_subtypes)})
+
+def show_error_case(i, kind, save_path=None):
+    show_result(
+        image_path=paths[i],
+        anomaly_map=anomaly_maps[i],
+        score=image_scores[i],
+        threshold=THRESHOLD,
+        label=labels[i],
+        subtype=subtypes[i],
+        save_path=save_path,
+    )
+    print(f&quot;[{kind}] {Path(paths[i]).name}&quot;)
+
+print(&quot;\n--- Sample false positives ---&quot;)
+for i in false_positives[:3]:
+    show_error_case(i, &quot;FALSE POSITIVE&quot;, error_dir / f&quot;fp_{i}.png&quot;)
+
+print(&quot;\n--- Sample false negatives ---&quot;)
+for i in false_negatives[:3]:
+    show_error_case(i, &quot;FALSE NEGATIVE&quot;, error_dir / f&quot;fn_{i}.png&quot;)
+
+print(f&quot;\nError-case images saved under {error_dir}/&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 32]</div>
+            <pre class="md-content">## 15. Threshold tuning (ROC curve + precision-recall tradeoff)
+
+Section 7 picked a single threshold using a mean + 3*std rule on validation scores.
+This section explores the full range of possible thresholds -- plotting the ROC curve
+and a precision/recall/F1-vs-threshold curve -- so you can justify that choice (or pick
+a different operating point) in your report, per the doc&#x27;s &quot;threshold tuning&quot; step.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [33]: Python Code</div>
+            <pre class="code-content"><code>from sklearn.metrics import roc_curve
+
+fpr, tpr, roc_thresholds = roc_curve(labels, image_scores)
+
+plt.figure(figsize=(6, 5))
+plt.plot(fpr, tpr, label=f&quot;ROC curve (AUC = {auc:.3f})&quot;)
+plt.plot([0, 1], [0, 1], linestyle=&quot;--&quot;, color=&quot;gray&quot;, label=&quot;Random&quot;)
+plt.scatter(
+    [(image_scores &gt; THRESHOLD).astype(int)[labels == 0].mean()],
+    [(image_scores &gt; THRESHOLD).astype(int)[labels == 1].mean()],
+    color=&quot;red&quot;, zorder=5, label=f&quot;Current threshold ({THRESHOLD:.3f})&quot;
+)
+plt.xlabel(&quot;False Positive Rate&quot;)
+plt.ylabel(&quot;True Positive Rate&quot;)
+plt.title(f&quot;ROC Curve -- {CATEGORY}&quot;)
+plt.legend()
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / f&quot;roc_curve_{CATEGORY}.png&quot;, dpi=150)
+plt.show()
+</code></pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [34]: Python Code</div>
+            <pre class="code-content"><code># Precision / Recall / F1 across a sweep of candidate thresholds
+candidate_thresholds = np.linspace(image_scores.min(), image_scores.max(), 50)
+
+precisions, recalls, f1s = [], [], []
+for t in candidate_thresholds:
+    preds_t = (image_scores &gt; t).astype(int)
+    if preds_t.sum() == 0 or preds_t.sum() == len(preds_t):
+        # avoid undefined precision/recall at degenerate thresholds
+        precisions.append(np.nan); recalls.append(np.nan); f1s.append(np.nan)
+        continue
+    p_t, r_t, f1_t, _ = precision_recall_fscore_support(labels, preds_t, average=&quot;binary&quot;, zero_division=0)
+    precisions.append(p_t); recalls.append(r_t); f1s.append(f1_t)
+
+plt.figure(figsize=(7, 5))
+plt.plot(candidate_thresholds, precisions, label=&quot;Precision&quot;)
+plt.plot(candidate_thresholds, recalls, label=&quot;Recall&quot;)
+plt.plot(candidate_thresholds, f1s, label=&quot;F1-score&quot;)
+plt.axvline(THRESHOLD, color=&quot;red&quot;, linestyle=&quot;--&quot;, label=f&quot;Current threshold ({THRESHOLD:.3f})&quot;)
+plt.xlabel(&quot;Anomaly score threshold&quot;)
+plt.ylabel(&quot;Metric value&quot;)
+plt.title(f&quot;Threshold sweep -- {CATEGORY}&quot;)
+plt.legend()
+plt.tight_layout()
+plt.savefig(OUTPUT_DIR / f&quot;threshold_sweep_{CATEGORY}.png&quot;, dpi=150)
+plt.show()
+
+if not np.all(np.isnan(f1s)):
+    best_f1_idx = int(np.nanargmax(f1s))
+    print(f&quot;Threshold that maximizes F1 on this test set: {candidate_thresholds[best_f1_idx]:.3f} &quot;
+          f&quot;(F1={f1s[best_f1_idx]:.3f}) vs. current validation-derived threshold {THRESHOLD:.3f} &quot;
+          f&quot;(F1={f1:.3f})&quot;)
+print(&quot;Note: picking a threshold by maximizing F1 on the test set is &#x27;peeking&#x27; at test &quot;
+      &quot;labels and shouldn&#x27;t be used as your final operating threshold -- it&#x27;s shown here &quot;
+      &quot;only to characterize the tradeoff curve for your report.&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 35]</div>
+            <pre class="md-content">## 16. Standalone inference interface
+
+A simple function that takes the path to *any* image (not necessarily one from
+`test_ds`) and returns a decision, score, and anomaly visualization -- the
+&quot;simple inference/demo interface&quot; step from the project&#x27;s day plan. This is what
+you&#x27;d wire up to a Streamlit app or CLI tool for the final demo/video.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [36]: Python Code</div>
+            <pre class="code-content"><code>def predict_on_image(image, show: bool = True, save_path=None):
+    &quot;&quot;&quot;
+    Runs the full trained pipeline (main model: memory_bank / nn_index / grid_size /
+    THRESHOLD, all built earlier in this notebook) on a single arbitrary image.
+
+    `image` may be a file path or an already-loaded PIL image (used by the web app).
+    Returns a dict with the decision, score, threshold, and the anomaly map array.
+    &quot;&quot;&quot;
+    if isinstance(image, (str, os.PathLike)):
+        image_path = str(image)
+        img = Image.open(image_path).convert(&quot;RGB&quot;)
+    else:
+        image_path = &quot;uploaded image&quot;
+        img = image.convert(&quot;RGB&quot;)
+    img_tensor = get_transform()(img).unsqueeze(0)
+
+    with _INFER_LOCK:                      # the extractor&#x27;s hook state is shared, so one call at a time
+        patch_feats, _ = extractor.extract(img_tensor)
+        score, amap = score_image(patch_feats.squeeze(0).numpy(), nn_index, grid_size)
+    decision = &quot;ANOMALOUS&quot; if score &gt; THRESHOLD else &quot;NORMAL&quot;
+
+    result = {
+        &quot;image_path&quot;: image_path,
+        &quot;score&quot;: score,
+        &quot;threshold&quot;: THRESHOLD,
+        &quot;decision&quot;: decision,
+        &quot;anomaly_map&quot;: amap,
+    }
+
+    if show:
+        fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+        display_img = img.resize((IMAGE_SIZE, IMAGE_SIZE))
+
+        axes[0].imshow(display_img)
+        axes[0].set_title(f&quot;Input\n{Path(image_path).name if image_path != &#x27;uploaded image&#x27; else image_path}&quot;)
+        axes[0].axis(&quot;off&quot;)
+
+        axes[1].imshow(amap, cmap=&quot;jet&quot;)
+        axes[1].set_title(f&quot;Anomaly map\nscore={score:.3f} (thr={THRESHOLD:.3f})&quot;)
+        axes[1].axis(&quot;off&quot;)
+
+        axes[2].imshow(display_img)
+        axes[2].imshow(amap, cmap=&quot;jet&quot;, alpha=0.5)
+        axes[2].set_title(f&quot;Overlay\nPrediction: {decision}&quot;)
+        axes[2].axis(&quot;off&quot;)
+
+        plt.tight_layout()
+        if save_path:
+            plt.savefig(save_path, dpi=150)
+        plt.show()
+        plt.close(fig)
+
+    return result
+
+
+# Example usage -- try it on any test image, or point it at a completely new file:
+_example_path = test_ds.samples[0][0]   # first test image, as a demo
+_ = predict_on_image(_example_path, save_path=OUTPUT_DIR / &quot;single_inference_example.png&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 37]</div>
+            <pre class="md-content">## 17. Qualitative localization comparison (predicted vs. ground truth)
+
+Section 14&#x27;s error analysis looked at *decision*-level correctness (was the image
+flagged anomalous or not). This section evaluates *localization*-level correctness --
+whether the anomaly map actually highlights the same region as the real defect --
+by overlaying the predicted anomaly map directly against the ground-truth mask, per
+image. This is what Section 2.7 means by &quot;qualitative examples of correct and
+incorrect localization.&quot;
+
+For each anomalous test image with a ground-truth mask, this computes a simple
+per-image localization overlap score (Intersection-over-Union between the
+thresholded anomaly map and the ground-truth mask), then shows the best- and
+worst-localized examples side by side: original image / ground truth / prediction.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [38]: Python Code</div>
+            <pre class="code-content"><code>def localization_iou(anomaly_map: np.ndarray, gt_mask: np.ndarray, top_fraction: float = 0.05):
+    &quot;&quot;&quot;
+    Thresholds the anomaly map to its top `top_fraction` highest-scoring pixels
+    (treating those as the &#x27;predicted defect region&#x27;), then computes IoU against
+    the binary ground-truth mask. A simple, interpretable localization-quality score.
+    &quot;&quot;&quot;
+    flat = anomaly_map.flatten()
+    n_top = max(1, int(len(flat) * top_fraction))
+    cutoff = np.partition(flat, -n_top)[-n_top]
+    pred_mask = (anomaly_map &gt;= cutoff).astype(np.uint8)
+
+    intersection = np.logical_and(pred_mask, gt_mask).sum()
+    union = np.logical_or(pred_mask, gt_mask).sum()
+    iou = intersection / union if union &gt; 0 else 0.0
+    return iou, pred_mask
+
+
+localization_records = []  # (index, iou, gt_mask, pred_mask)
+
+for i, (amap, label, subtype, path) in enumerate(zip(anomaly_maps, labels, subtypes, paths)):
+    if subtype == &quot;good&quot;:
+        continue
+    gt = load_gt_mask(path, subtype)
+    if gt is None or gt.sum() == 0:
+        continue
+    iou, pred_mask = localization_iou(amap, gt)
+    localization_records.append({&quot;index&quot;: i, &quot;iou&quot;: iou, &quot;gt_mask&quot;: gt, &quot;pred_mask&quot;: pred_mask})
+
+if localization_records:
+    ious = [r[&quot;iou&quot;] for r in localization_records]
+    print(f&quot;Localization IoU across {len(localization_records)} anomalous images with masks: &quot;
+          f&quot;mean={np.mean(ious):.3f}, min={np.min(ious):.3f}, max={np.max(ious):.3f}&quot;)
+else:
+    print(&quot;No anomalous images with usable ground-truth masks were found -- &quot;
+          &quot;check the ground_truth/ folder structure under DATA_ROOT / CATEGORY.&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [39]: Python Code</div>
+            <pre class="code-content"><code>def show_localization_comparison(record, save_path=None):
+    i = record[&quot;index&quot;]
+    img = Image.open(paths[i]).convert(&quot;RGB&quot;).resize((IMAGE_SIZE, IMAGE_SIZE))
+
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+
+    axes[0].imshow(img)
+    axes[0].set_title(f&quot;Input\n{Path(paths[i]).name}\n({subtypes[i]})&quot;)
+    axes[0].axis(&quot;off&quot;)
+
+    axes[1].imshow(record[&quot;gt_mask&quot;], cmap=&quot;gray&quot;)
+    axes[1].set_title(&quot;Ground truth\ndefect region&quot;)
+    axes[1].axis(&quot;off&quot;)
+
+    axes[2].imshow(record[&quot;pred_mask&quot;], cmap=&quot;gray&quot;)
+    axes[2].set_title(f&quot;Predicted region\n(top 5% anomaly score)&quot;)
+    axes[2].axis(&quot;off&quot;)
+
+    axes[3].imshow(img)
+    axes[3].imshow(record[&quot;gt_mask&quot;], cmap=&quot;Greens&quot;, alpha=0.4)
+    axes[3].imshow(record[&quot;pred_mask&quot;], cmap=&quot;Reds&quot;, alpha=0.4)
+    axes[3].set_title(f&quot;Overlay\nIoU = {record[&#x27;iou&#x27;]:.3f}\n(green=truth, red=predicted)&quot;)
+    axes[3].axis(&quot;off&quot;)
+
+    plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=150)
+    plt.show()
+    plt.close(fig)
+
+
+if localization_records:
+    localization_records_sorted = sorted(localization_records, key=lambda r: r[&quot;iou&quot;], reverse=True)
+    localization_dir = OUTPUT_DIR / &quot;localization_comparison&quot;
+    localization_dir.mkdir(exist_ok=True)
+
+    print(&quot;--- Best-localized examples (correct localization) ---&quot;)
+    for r in localization_records_sorted[:2]:
+        show_localization_comparison(r, save_path=localization_dir / f&quot;best_{r[&#x27;index&#x27;]}.png&quot;)
+
+    print(&quot;--- Worst-localized examples (incorrect localization) ---&quot;)
+    for r in localization_records_sorted[-2:]:
+        show_localization_comparison(r, save_path=localization_dir / f&quot;worst_{r[&#x27;index&#x27;]}.png&quot;)
+
+    print(f&quot;Saved localization comparison images under {localization_dir}/&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 40]</div>
+            <pre class="md-content">## 18. Multi-category validation
+
+Everything above was run on a single category (Juice Bottle). A single-category result
+only demonstrates a proof-of-concept, not a validated system -- this section reruns the
+full main-model pipeline (data loading, feature extraction, memory bank, threshold,
+scoring, evaluation) independently for every MVTec LOCO AD category, and reports how
+well the approach generalizes across different object types.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [41]: Python Code</div>
+            <pre class="code-content"><code>def run_category_pipeline(category: str, backbone_name: str = &quot;wide_resnet50_2&quot;,
+                           coreset_ratio: float = COOSET_SAMPLING_RATIO):
+    &quot;&quot;&quot;
+    Runs the complete main-model pipeline end-to-end for a single category:
+    dataset loading -&gt; feature extraction -&gt; memory bank -&gt; threshold -&gt; test
+    scoring -&gt; image-level and subtype-level metrics. Fully self-contained --
+    does not depend on any global train_ds/val_ds/test_ds from earlier sections.
+    &quot;&quot;&quot;
+    print(f&quot;\n{&#x27;=&#x27;*60}\nCategory: {category}\n{&#x27;=&#x27;*60}&quot;)
+
+    cat_train_ds = NormalImageDataset(category, &quot;train&quot;)
+    cat_val_ds = NormalImageDataset(category, &quot;validation&quot;)
+    cat_test_ds = TestImageDataset(category)
+
+    ext = PatchFeatureExtractor(backbone_name=backbone_name)
+    n_images_note = f&quot;{len(cat_train_ds)} train / {len(cat_val_ds)} val / {len(cat_test_ds)} test&quot;
+    print(f&quot;Loaded {n_images_note}&quot;)
+
+    loader = DataLoader(cat_train_ds, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, shuffle=False)
+    all_patches = []
+    grid = None
+    for images, _ in loader:
+        pf, grid = ext.extract(images)
+        b, n, c = pf.shape
+        all_patches.append(pf.reshape(b * n, c).numpy())
+    pool = np.concatenate(all_patches, axis=0)
+    mb = greedy_coreset_sampling(pool, coreset_ratio) if coreset_ratio &lt; 1.0 else pool
+    idx = TorchNN(mb, n_neighbors=N_NEIGHBORS)
+
+    val_scores_ = []
+    for img_t, _ in cat_val_ds:
+        pf, _ = ext.extract(img_t.unsqueeze(0))
+        s, _ = score_image(pf.squeeze(0).numpy(), idx, grid)
+        val_scores_.append(s)
+    val_scores_ = np.array(val_scores_)
+    thr = float(val_scores_.mean() + N_STD_FOR_THRESHOLD * val_scores_.std())
+
+    scores_, labels_, subtypes_ = [], [], []
+    for img_t, lab, sub, path in cat_test_ds:
+        pf, _ = ext.extract(img_t.unsqueeze(0))
+        s, _ = score_image(pf.squeeze(0).numpy(), idx, grid)
+        scores_.append(s); labels_.append(lab); subtypes_.append(sub)
+    scores_ = np.array(scores_)
+    labels_ = np.array(labels_)
+
+    auc_ = roc_auc_score(labels_, scores_)
+    preds_ = (scores_ &gt; thr).astype(int)
+    p_, r_, f1_, _ = precision_recall_fscore_support(labels_, preds_, average=&quot;binary&quot;, zero_division=0)
+
+    subtype_detection = {}
+    for subtype in [&quot;good&quot;, &quot;logical_anomalies&quot;, &quot;structural_anomalies&quot;]:
+        sub_idx = [i for i, s in enumerate(subtypes_) if s == subtype]
+        if not sub_idx:
+            continue
+        sub_preds = preds_[sub_idx]
+        rate = (1 - sub_preds.mean()) if subtype == &quot;good&quot; else sub_preds.mean()
+        subtype_detection[subtype] = rate
+
+    print(f&quot;Train/Val/Test sizes: {len(cat_train_ds)}/{len(cat_val_ds)}/{len(cat_test_ds)}&quot;)
+    print(f&quot;ROC-AUC: {auc_:.3f}  Precision: {p_:.3f}  Recall: {r_:.3f}  F1: {f1_:.3f}&quot;)
+    print(f&quot;Subtype detection rates: {subtype_detection}&quot;)
+
+    return {
+        &quot;category&quot;: category, &quot;n_train&quot;: len(cat_train_ds), &quot;n_val&quot;: len(cat_val_ds),
+        &quot;n_test&quot;: len(cat_test_ds), &quot;threshold&quot;: thr, &quot;auc&quot;: auc_, &quot;precision&quot;: p_,
+        &quot;recall&quot;: r_, &quot;f1&quot;: f1_, &quot;subtype_detection&quot;: subtype_detection,
+    }
+
+
+ALL_CATEGORIES = [&quot;breakfast_box&quot;, &quot;juice_bottle&quot;, &quot;pushpins&quot;, &quot;screw_bag&quot;, &quot;splicing_connectors&quot;]
+
+multi_category_results = []
+for cat in ALL_CATEGORIES:
+    cat_path = DATA_ROOT / cat
+    if not cat_path.exists():
+        print(f&quot;Skipping {cat} -- folder not found at {cat_path}&quot;)
+        continue
+    try:
+        result = run_category_pipeline(cat)
+        multi_category_results.append(result)
+    except Exception as e:
+        print(f&quot;Skipping {cat} due to error: {type(e).__name__}: {e}&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [42]: Python Code</div>
+            <pre class="code-content"><code>import pandas as pd
+
+summary_rows = []
+for r in multi_category_results:
+    row = {
+        &quot;Category&quot;: r[&quot;category&quot;],
+        &quot;Train/Val/Test&quot;: f&quot;{r[&#x27;n_train&#x27;]}/{r[&#x27;n_val&#x27;]}/{r[&#x27;n_test&#x27;]}&quot;,
+        &quot;ROC-AUC&quot;: round(r[&quot;auc&quot;], 3),
+        &quot;Precision&quot;: round(r[&quot;precision&quot;], 3),
+        &quot;Recall&quot;: round(r[&quot;recall&quot;], 3),
+        &quot;F1&quot;: round(r[&quot;f1&quot;], 3),
+        &quot;Logical detection&quot;: round(r[&quot;subtype_detection&quot;].get(&quot;logical_anomalies&quot;, float(&quot;nan&quot;)), 3),
+        &quot;Structural detection&quot;: round(r[&quot;subtype_detection&quot;].get(&quot;structural_anomalies&quot;, float(&quot;nan&quot;)), 3),
+    }
+    summary_rows.append(row)
+
+multi_category_df = pd.DataFrame(summary_rows)
+if multi_category_df.empty:
+    print(&#x27;No category finished -- check the messages above (dataset folders or weight download).&#x27;)
+else:
+    print(multi_category_df.to_string(index=False))
+
+if len(multi_category_df) &gt; 1:
+    print(f&quot;\nMean ROC-AUC across categories: {multi_category_df[&#x27;ROC-AUC&#x27;].mean():.3f}&quot;)
+    print(f&quot;Mean logical-anomaly detection: {multi_category_df[&#x27;Logical detection&#x27;].mean():.3f}&quot;)
+    print(f&quot;Mean structural-anomaly detection: {multi_category_df[&#x27;Structural detection&#x27;].mean():.3f}&quot;)
+    print(&quot;\nThis is the key evidence for your report&#x27;s &#x27;generalization&#x27; claim -- cite the &quot;
+          &quot;per-category spread, not just the mean, since consistency across categories matters &quot;
+          &quot;as much as the average.&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 43]</div>
+            <pre class="md-content">## 19. Trained statistical model: per-location Gaussian anomaly detector (PaDiM-style)
+
+The main model (Sections 5-9) stores raw normal patch features and scores new patches
+by nearest-neighbor distance -- this is a non-parametric, &quot;instance memorization&quot;
+approach. This section fits an explicit statistical model instead: for every patch
+*location* in the feature grid, it estimates a mean vector and a variance vector from
+the training images (i.e. it learns a per-location Gaussian distribution of what
+&quot;normal&quot; looks like there), then scores test patches by how many standard deviations
+they fall from that learned distribution (a diagonal Mahalanobis distance).
+
+This directly answers &quot;what machine learning did you build&quot;: these mean/variance
+parameters are *fitted* from data (maximum-likelihood estimation of a Gaussian), which
+is a genuine trained model, as distinct from the memory-bank/kNN approach which performs
+no parameter estimation at all.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [44]: Python Code</div>
+            <pre class="code-content"><code>def fit_gaussian_model(dataset, extractor, eps: float = 1e-6):
+    &quot;&quot;&quot;
+    Fits a per-patch-location diagonal Gaussian: for each of the h*w grid positions,
+    estimates mean and variance across all training images at that position.
+    Returns: mean (h*w, C), var (h*w, C), grid_size
+    &quot;&quot;&quot;
+    # Streaming sums in float64: the naive version stacks every training patch (~2 GB for 335 images)
+    # plus several temporary copies in .var(), which can exhaust RAM; this needs only (N, C) arrays.
+    loader = DataLoader(dataset, batch_size=BATCH_SIZE, num_workers=NUM_WORKERS, shuffle=False)
+    total, total_sq, count, grid = None, None, 0, None
+    for images, _ in loader:
+        pf, grid = extractor.extract(images)         # (B, N, C) float32 tensor on CPU
+        pf = pf.double()
+        s, sq = pf.sum(dim=0), (pf ** 2).sum(dim=0)
+        total = s if total is None else total + s
+        total_sq = sq if total_sq is None else total_sq + sq
+        count += pf.shape[0]
+
+    mean_t = total / count                                       # (N, C)
+    var_t = (total_sq / count - mean_t ** 2).clamp_min(0.0)       # population variance, never negative
+    mean = mean_t.float().numpy()
+    var = var_t.float().numpy() + eps                             # regularized to avoid division by zero
+    return mean, var, grid
+
+
+def gaussian_anomaly_score(patch_features: np.ndarray, mean: np.ndarray, var: np.ndarray,
+                            grid_size, out_size: int = IMAGE_SIZE, topk: int = 1):
+    &quot;&quot;&quot;
+    Diagonal Mahalanobis distance per patch: sum over channels of (x-mu)^2 / var.
+    Same image-level aggregation (top-k mean) and upsampling as the kNN scorer,
+    so results are directly comparable.
+    &quot;&quot;&quot;
+    sq_z = ((patch_features - mean) ** 2) / var          # (N, C)
+    patch_scores = sq_z.sum(axis=1)                       # (N,)
+
+    h, w = grid_size
+    score_map = torch.tensor(patch_scores, dtype=torch.float32).reshape(1, 1, h, w)
+    upsampled = F.interpolate(score_map, size=(out_size, out_size), mode=&quot;bilinear&quot;,
+                               align_corners=False).squeeze().numpy()
+
+    top_scores = np.sort(patch_scores)[::-1][:topk]
+    image_score = float(top_scores.mean())
+    return image_score, upsampled
+
+
+print(&quot;Fitting Gaussian model on training data...&quot;)
+gauss_mean, gauss_var, gauss_grid = fit_gaussian_model(train_ds, extractor)
+print(f&quot;Fitted Gaussian parameters: mean {gauss_mean.shape}, var {gauss_var.shape}&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [45]: Python Code</div>
+            <pre class="code-content"><code># Threshold from validation (same data-driven approach as the kNN model)
+gauss_val_scores = []
+for img_t, _ in val_ds:
+    pf, _ = extractor.extract(img_t.unsqueeze(0))
+    s, _ = gaussian_anomaly_score(pf.squeeze(0).numpy(), gauss_mean, gauss_var, gauss_grid)
+    gauss_val_scores.append(s)
+gauss_val_scores = np.array(gauss_val_scores)
+gauss_threshold = float(gauss_val_scores.mean() + N_STD_FOR_THRESHOLD * gauss_val_scores.std())
+
+# Score the test set
+gauss_scores, gauss_labels_check = [], []
+for img_t, lab, sub, path in test_ds:
+    pf, _ = extractor.extract(img_t.unsqueeze(0))
+    s, _ = gaussian_anomaly_score(pf.squeeze(0).numpy(), gauss_mean, gauss_var, gauss_grid)
+    gauss_scores.append(s)
+    gauss_labels_check.append(lab)
+gauss_scores = np.array(gauss_scores)
+gauss_labels_check = np.array(gauss_labels_check)
+
+gauss_auc = roc_auc_score(gauss_labels_check, gauss_scores)
+gauss_preds = (gauss_scores &gt; gauss_threshold).astype(int)
+gauss_p, gauss_r, gauss_f1, _ = precision_recall_fscore_support(gauss_labels_check, gauss_preds, average=&quot;binary&quot;, zero_division=0)
+
+print(f&quot;Gaussian model -- Threshold: {gauss_threshold:.3f}&quot;)
+print(f&quot;Gaussian model -- ROC-AUC: {gauss_auc:.3f}  Precision: {gauss_p:.3f}  Recall: {gauss_r:.3f}  F1: {gauss_f1:.3f}&quot;)
+
+print(&quot;\n--- Three-way method comparison ---&quot;)
+method_rows = []
+if baseline_results is not None:
+    method_rows.append({&quot;Method&quot;: &quot;Baseline (ResNet18, full memory bank, kNN)&quot;, &quot;ROC-AUC&quot;: baseline_results[&quot;auc&quot;],
+                        &quot;Precision&quot;: baseline_results[&quot;precision&quot;], &quot;Recall&quot;: baseline_results[&quot;recall&quot;],
+                        &quot;F1&quot;: baseline_results[&quot;f1&quot;]})
+method_rows.append({&quot;Method&quot;: &quot;Main (WideResNet50, coreset memory bank, kNN)&quot;, &quot;ROC-AUC&quot;: auc,
+                    &quot;Precision&quot;: precision, &quot;Recall&quot;: recall, &quot;F1&quot;: f1})
+method_rows.append({&quot;Method&quot;: &quot;Gaussian (WideResNet50, fitted per-location Gaussian)&quot;, &quot;ROC-AUC&quot;: gauss_auc,
+                    &quot;Precision&quot;: gauss_p, &quot;Recall&quot;: gauss_r, &quot;F1&quot;: gauss_f1})
+three_way_df = pd.DataFrame(method_rows)
+print(three_way_df.to_string(index=False))
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 46]</div>
+            <pre class="md-content">## 20. Precision-recall operating point trade-off
+
+A single ROC-AUC number (0.896) hides an important detail: at the current
+validation-derived threshold, recall is only ~0.47 -- more than half of all real
+anomalies are missed, even though precision is very high (~0.99, almost no false
+alarms). This section makes that trade-off explicit by evaluating several candidate
+thresholds side by side, so the choice of operating point can be justified rather than
+presented as a single unexplained number.</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [47]: Python Code</div>
+            <pre class="code-content"><code># Build candidate thresholds from validation-score statistics
+val_mean, val_std = val_scores.mean(), val_scores.std()
+candidate_points = {
+    &quot;Very conservative (mean + 4*std)&quot;: val_mean + 4 * val_std,
+    &quot;Current / conservative (mean + 3*std)&quot;: val_mean + 3 * val_std,
+    &quot;Balanced (mean + 2*std)&quot;: val_mean + 2 * val_std,
+    &quot;High recall (mean + 1*std)&quot;: val_mean + 1 * val_std,
+}
+
+rows = []
+for label_name, t in candidate_points.items():
+    preds_t = (image_scores &gt; t).astype(int)
+    p_t, r_t, f1_t, _ = precision_recall_fscore_support(labels, preds_t, average=&quot;binary&quot;, zero_division=0)
+    fp = int(((preds_t == 1) &amp; (labels == 0)).sum())
+    fn = int(((preds_t == 0) &amp; (labels == 1)).sum())
+    rows.append({
+        &quot;Operating point&quot;: label_name, &quot;Threshold&quot;: round(t, 3),
+        &quot;Precision&quot;: round(p_t, 3), &quot;Recall&quot;: round(r_t, 3), &quot;F1&quot;: round(f1_t, 3),
+        &quot;False Positives&quot;: fp, &quot;False Negatives&quot;: fn,
+    })
+
+operating_point_df = pd.DataFrame(rows)
+print(operating_point_df.to_string(index=False))
+
+print(&quot;&quot;&quot;
+Interpretation for the report:
+- The current threshold (mean + 3*std) is a CONSERVATIVE operating point: it minimizes
+  false alarms (good for avoiding unnecessary line stoppages) at the cost of missing
+  many real defects.
+- A quality-control system where missed defects are costly (e.g. safety-critical
+  products) would justify moving to the &#x27;High recall&#x27; or &#x27;Balanced&#x27; operating point
+  instead, accepting more false alarms in exchange for catching more real anomalies.
+- This is a deployment decision, not a modeling one -- the same trained model supports
+  any of these operating points simply by changing the threshold, so this table should
+  be presented as a tunable design choice in the report rather than a limitation of the
+  method itself.
+&quot;&quot;&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 48]</div>
+            <pre class="md-content">## 21. Notes for the report
+
+- **Multi-category generalization**: Section 18 runs the full pipeline independently
+  across all 5 categories and reports per-category metrics plus mean detection rates --
+  use this table (not the single Juice Bottle result) as your headline generalization
+  evidence, and discuss the spread across categories, not just the average.
+- **What ML was actually built**: Section 19 fits an explicit statistical model (a
+  per-patch-location Gaussian, mean/variance estimated from training data) as a second,
+  genuinely *trained* anomaly scorer, alongside the memory-bank/kNN approach. Use this to
+  answer directly: &quot;we estimated Gaussian distribution parameters via maximum likelihood
+  from the pretrained feature space of normal images&quot; -- a real modeling contribution,
+  not just off-the-shelf inference.
+- **Precision-recall trade-off**: Section 20 makes explicit that the headline ROC-AUC
+  (0.896) sits behind a threshold choice with real consequences (recall ~0.47 at the
+  current conservative threshold). Present this as a tunable deployment decision, with
+  the operating-point table as evidence you understand the trade-off rather than just
+  reporting one number.
+- **Baseline vs main model**: Sections 11-12 provide the ResNet18-vs-WideResNet50
+  comparison; Section 19 adds a third method (Gaussian) for a fuller comparison.
+- **Pixel-level localization metrics**: Section 13 computes pixel-level ROC-AUC against
+  the ground-truth masks. Section 17 adds qualitative best/worst localization examples
+  with an IoU score.
+- **Note on localization metric choice**: this notebook uses pixel-level ROC-AUC and a
+  simple top-k IoU, which are standard and interpretable. The original MVTec LOCO AD
+  paper&#x27;s official benchmark uses a different metric (saturated per-region overlap,
+  sPRO) -- worth mentioning this choice explicitly in your report&#x27;s methodology section.
+- **Error analysis (decision-level)**: Section 14 pulls out false-positive/false-negative
+  detection examples with images saved under `outputs/error_analysis/`.
+- **Standalone inference**: Section 16&#x27;s `predict_on_image(path)` runs the full trained
+  pipeline on any single image -- the Gradio web app in Section 22 calls it directly,
+  and it is what you would show in your demo video.
+- **Logical vs structural gap**: check the subtype breakdowns across categories in
+  Section 18, and the IoU scores in Section 17 -- feature-distance methods are typically
+  weaker on logical anomalies than structural ones. This pattern showing up consistently
+  across multiple categories (not just Juice Bottle) would be strong evidence for your
+  discussion section.
+</pre>
+        </div>
+        
+        <div class="cell md-cell">
+            <div class="cell-label">Markdown [Cell 49]</div>
+            <pre class="md-content">## 22. Web application — manufacturing image inspection (Gradio)
+
+This interface **reuses `predict_on_image()`** and its fitted `extractor`, `nn_index`, `grid_size` and `THRESHOLD`; it does not train a separate model. Run the preceding model-preparation cells (at least Sections 0–9 and 16) before launching.
+
+* If Gradio is missing, run `%pip install gradio` in a new cell, restart the kernel, then rerun the notebook.
+* The app is configured for the selected `CATEGORY` (initially `juice_bottle`) — upload images of that product only.
+* The server starts in the background and opens in your browser (the address is printed below the launch cell). Stop it with `inspection_app.close()`.
+* The heatmap is a relative visualization, not a calibrated defect probability.
+</pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [50]: Python Code</div>
+            <pre class="code-content"><code># If needed, run this in a separate notebook cell: %pip install gradio
+try:
+    import gradio as gr
+except ImportError as exc:
+    raise ImportError(&quot;Install Gradio in this kernel with `%pip install gradio`, then restart the kernel and rerun.&quot;) from exc
+
+from PIL import Image as PILImage
+
+_required = [&quot;predict_on_image&quot;, &quot;extractor&quot;, &quot;nn_index&quot;, &quot;grid_size&quot;, &quot;THRESHOLD&quot;, &quot;CATEGORY&quot;]
+_missing = [name for name in _required if name not in globals()]
+if _missing:
+    raise RuntimeError(&quot;Run the model preparation and single-image inference cells first. Missing: &quot; + &quot;, &quot;.join(_missing))
+
+_BILINEAR = getattr(getattr(PILImage, &quot;Resampling&quot;, PILImage), &quot;BILINEAR&quot;)
+
+
+def inspect_uploaded_image(uploaded_image):
+    &quot;&quot;&quot;Use the notebook&#x27;s tested single-image inference API and return Gradio outputs.&quot;&quot;&quot;
+    if uploaded_image is None:
+        raise gr.Error(&quot;Please upload a product image first.&quot;)
+
+    try:
+        original = uploaded_image.convert(&quot;RGB&quot;)
+        result = predict_on_image(original, show=False)      # accepts a PIL image directly -- no temp file needed
+
+        decision = str(result[&quot;decision&quot;])
+        score = float(result[&quot;score&quot;])
+        threshold = float(result[&quot;threshold&quot;])
+        amap = np.asarray(result[&quot;anomaly_map&quot;], dtype=np.float32)
+        if amap.ndim != 2 or amap.size == 0 or not np.isfinite(amap).all():
+            raise ValueError(&quot;The anomaly map must be a finite, non-empty 2D array.&quot;)
+
+        low, high = float(amap.min()), float(amap.max())
+        normalized = np.clip((amap - low) / (high - low), 0, 1) if high &gt; low else np.zeros_like(amap)
+        gray = PILImage.fromarray((normalized * 255).astype(np.uint8)).resize(original.size, _BILINEAR)
+        heat = PILImage.fromarray((plt.get_cmap(&quot;jet&quot;)(np.asarray(gray) / 255.0)[..., :3] * 255).astype(np.uint8))
+        overlay = PILImage.blend(original, heat, alpha=0.40)
+
+        summary = (f&quot;### Inspection result: **{decision}**\n&quot;
+                   f&quot;**Category:** `{CATEGORY}`  \n&quot;
+                   f&quot;**Anomaly score:** `{score:.4f}`  \n&quot;
+                   f&quot;**Decision threshold:** `{threshold:.4f}`  \n\n&quot;
+                   &quot;Scores measure deviation from defect-free reference features. &quot;
+                   &quot;Heatmap colors show relative spatial anomalies, not defect probabilities.&quot;)
+        return summary, original, heat, overlay
+    except Exception as exc:
+        raise gr.Error(f&quot;Inspection failed: {type(exc).__name__}: {exc}&quot;) from exc
+
+
+print(f&quot;Gradio inference ready: category={CATEGORY}, threshold={float(THRESHOLD):.4f}&quot;)
+</code></pre>
+        </div>
+        
+        <div class="cell code-cell">
+            <div class="cell-label">In [51]: Python Code</div>
+            <pre class="code-content"><code># Close any earlier Gradio instance before re-running this cell (frees the port).
+if &quot;inspection_app&quot; in globals():
+    try:
+        inspection_app.close()
+    except Exception:
+        pass
+
+
+def _upload_widget():
+    try:                                                    # Gradio 4 / 5
+        return gr.Image(label=&quot;Upload product image&quot;, type=&quot;pil&quot;, sources=[&quot;upload&quot;])
+    except TypeError:                                       # Gradio 3.x
+        return gr.Image(label=&quot;Upload product image&quot;, type=&quot;pil&quot;, source=&quot;upload&quot;)
+
+
+with gr.Blocks(title=&quot;Manufacturing Visual Anomaly Inspector&quot;) as inspection_app:
+    gr.Markdown(&quot;# Manufacturing Visual Anomaly Inspector&quot;)
+    gr.Markdown(
+        f&quot;**Model category:** `{CATEGORY}` | Upload an image from this product category. &quot;
+        &quot;The detector compares its visual features with defect-free reference images. &quot;
+        &quot;It does not explicitly enforce component-count or assembly rules.&quot;
+    )
+    with gr.Row():
+        upload = _upload_widget()
+        with gr.Column():
+            run_button = gr.Button(&quot;Inspect image&quot;, variant=&quot;primary&quot;)
+            result_text = gr.Markdown(&quot;Upload an image and click **Inspect image**.&quot;)
+    with gr.Row():
+        original_out = gr.Image(label=&quot;Original image&quot;, interactive=False)
+        heatmap_out = gr.Image(label=&quot;Anomaly heatmap&quot;, interactive=False)
+        overlay_out = gr.Image(label=&quot;Suspected defect overlay&quot;, interactive=False)
+    run_button.click(
+        fn=inspect_uploaded_image,
+        inputs=upload,
+        outputs=[result_text, original_out, heatmap_out, overlay_out],
+    )
+
+# prevent_thread_lock=True returns control to the notebook (debug=True would block every later cell);
+# inline=False + inbrowser=True because the inline iframe often stays blank in VS Code notebooks.
+inspection_app.launch(server_name=&quot;127.0.0.1&quot;, share=False, inline=False, inbrowser=True,
+                      prevent_thread_lock=True, show_error=True)
+_url = getattr(inspection_app, &quot;local_url&quot;, None)
+print(f&quot;Web app running at: {_url or &#x27;http://127.0.0.1:7860&#x27;}   (stop it with inspection_app.close())&quot;)
+</code></pre>
+        </div>
+        
+</div>
+</body>
+</html>
