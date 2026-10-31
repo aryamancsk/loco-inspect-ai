@@ -1,0 +1,50 @@
+[
+    {
+        "defect_name": "1_additional_pushpin",
+        "pixel_value": 255,
+        "saturation_threshold": 6300,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "2_additional_pushpins",
+        "pixel_value": 254,
+        "saturation_threshold": 12600,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "missing_pushpin",
+        "pixel_value": 253,
+        "saturation_threshold": 6300,
+        "relative_saturation": false
+    },
+    {
+        "defect_name": "missing_separator",
+        "pixel_value": 252,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "front_bent",
+        "pixel_value": 251,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "broken",
+        "pixel_value": 250,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "color",
+        "pixel_value": 249,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    },
+    {
+        "defect_name": "contamination",
+        "pixel_value": 248,
+        "saturation_threshold": 1.0,
+        "relative_saturation": true
+    }
+]

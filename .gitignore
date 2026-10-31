@@ -9,11 +9,7 @@ venv/
 ENV/
 env/
 
-# Additional heavy benchmark categories (>5 GB)
-DATA/breakfast_box/
-DATA/pushpins/
-DATA/screw_bag/
-DATA/splicing_connectors/
+# Avoid duplicate dataset copy inside PTRS
 PTRS/Industry/DATA/
 
 # Large archives
